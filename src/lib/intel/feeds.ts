@@ -101,8 +101,8 @@ const threatFoxSchema = z.record(
   z.string(),
   z.array(
     z.object({
-      ioc: z.string(),
-      ioc_type: z.string(),
+      ioc: z.string().nullable().optional(),
+      ioc_type: z.string().nullable().optional(),
       threat_type: z.string().nullable().optional(),
       malware: z.string().nullable().optional(),
       malware_printable: z.string().nullable().optional(),
@@ -119,14 +119,18 @@ export const THREATFOX_RECENT_URL = "https://threatfox.abuse.ch/export/json/rece
 
 export const threatFoxRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxSchema, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024 });
-  const entries = Object.values(data).flat();
+  // A small number of ThreatFox export rows omit the ioc/ioc_type fields; those carry
+  // no usable indicator, so they are dropped rather than surfaced as blank rows.
+  const entries = Object.values(data)
+    .flat()
+    .filter((e): e is ThreatFoxEntry & { ioc: string; ioc_type: string } => Boolean(e.ioc && e.ioc_type));
   return { entries, count: entries.length };
 });
 
 const urlhausSchema = z.array(
   z.object({
-    id: z.string(),
-    url: z.string(),
+    id: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
     url_status: z.string().nullable().optional(),
     threat: z.string().nullable().optional(),
     host: z.string().nullable().optional(),
@@ -141,7 +145,8 @@ export const URLHAUS_RECENT_URL = "https://urlhaus.abuse.ch/downloads/json_recen
 
 export const urlhausRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
-  return { entries: data, count: data.length };
+  const entries = data.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
+  return { entries, count: entries.length };
 });
 
 export interface BazaarEntry {
