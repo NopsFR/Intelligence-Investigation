@@ -66,6 +66,14 @@ export const kevFeed = feed(60 * 60 * 1000, async () => {
   return { ...data, index: new Map(data.vulnerabilities.map((v) => [v.cveID.toUpperCase(), v])) };
 });
 
+// abuse.ch has required a free Auth-Key for its APIs since 2025; without it these
+// export feeds still respond 200 but silently redact the actual indicator value
+// (ioc / id / url) from every row, which otherwise looks like "0 usable entries".
+function abusechHeaders(): Record<string, string> {
+  const key = process.env.ABUSECH_AUTH_KEY?.trim();
+  return key ? { "Auth-Key": key } : {};
+}
+
 export const FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json";
 
 const feodoSchema = z.array(
@@ -85,7 +93,7 @@ const feodoSchema = z.array(
 export type FeodoEntry = z.infer<typeof feodoSchema>[number];
 
 export const feodoFeed = feed(15 * 60 * 1000, async () => {
-  const { data } = await providerJson(FEODO_URL, feodoSchema, { timeoutMs: 10_000, maxBytes: 4 * 1024 * 1024 });
+  const { data } = await providerJson(FEODO_URL, feodoSchema, { timeoutMs: 10_000, maxBytes: 4 * 1024 * 1024, headers: abusechHeaders() });
   const byIp = new Map<string, FeodoEntry[]>();
   for (const entry of data) {
     const list = byIp.get(entry.ip_address) ?? [];
@@ -126,7 +134,7 @@ export type ThreatFoxEntry = z.infer<typeof threatFoxSchema>[string][number];
 export const THREATFOX_RECENT_URL = "https://threatfox.abuse.ch/export/json/recent/";
 
 export const threatFoxRecentFeed = feed(15 * 60 * 1000, async () => {
-  const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxSchema, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024 });
+  const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxSchema, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024, headers: abusechHeaders() });
   const raw = Object.values(data).flat();
   // A small number of ThreatFox export rows omit the ioc/ioc_type fields; those carry
   // no usable indicator, so they are dropped rather than surfaced as blank rows.
@@ -155,7 +163,7 @@ export type UrlhausEntry = z.infer<typeof urlhausEntry>;
 export const URLHAUS_RECENT_URL = "https://urlhaus.abuse.ch/downloads/json_recent/";
 
 export const urlhausRecentFeed = feed(15 * 60 * 1000, async () => {
-  const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
+  const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024, headers: abusechHeaders() });
   const raw = Array.isArray(data) ? data : Object.values(data).flat();
   const entries = raw.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
   const diagnostics = entries.length === 0 && raw.length > 0 ? { rawCount: raw.length, sample: JSON.stringify(raw[0]).slice(0, 300) } : undefined;
@@ -200,7 +208,7 @@ function parseCsvLine(line: string): string[] {
 }
 
 export const bazaarRecentFeed = feed(15 * 60 * 1000, async () => {
-  const response = await providerRequest(BAZAAR_RECENT_URL, { timeoutMs: 20_000, maxBytes: 2 * 1024 * 1024 });
+  const response = await providerRequest(BAZAAR_RECENT_URL, { timeoutMs: 20_000, maxBytes: 2 * 1024 * 1024, headers: abusechHeaders() });
   const text = response.text;
   const entries: BazaarEntry[] = [];
   for (const line of text.split("\n")) {
