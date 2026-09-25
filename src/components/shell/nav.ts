@@ -89,6 +89,7 @@ export const NAV: NavGroup[] = [
       { href: "/dfir", label: "DFIR", icon: FileSearch, hint: "Process trees, hash comparison, timelines and forensic references" },
       { href: "/labs/decoder", label: "Decoder", icon: ShieldHalf, hint: "Chained encoding and decoding with auto-detection" },
       { href: "/labs/crypto", label: "Crypto lab", icon: FlaskConical, hint: "Hashing, HMAC, XOR, AES and RSA — input, transformation, output" },
+      { href: "/labs/password", label: "Password security", icon: KeyRound, hint: "Strength analysis, breach check, generators — never stored or logged" },
       { href: "/labs/exercises", label: "Exercises", icon: Cpu, hint: "Local, isolated vulnerability exercises" },
       { href: "/toolbox", label: "Toolbox", icon: Wrench, hint: "Network, DNS, web and encoding utilities", shortcut: "G T" },
     ],
