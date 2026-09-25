@@ -194,13 +194,16 @@ export const correlation: ProviderDefinition = {
       notConfigured: outcomes.filter((o) => o.status === "NOT_CONFIGURED").length,
       skipped: outcomes.filter((o) => o.status === "SKIPPED").length,
     };
+    const intelFailed = intel.length - answeredIntel.length;
     const summary = adverseVendors.length >= 2
       ? `Corroborated by ${adverseVendors.length} independent sources`
       : adverse.length
         ? `Flagged by ${adverse.map((s) => s.name).join(", ")}`
         : answeredIntel.length
           ? `No adverse intelligence from ${plural(answeredIntel.length, "source")}`
-          : `${coverage.answered} of ${coverage.planned} sources answered`;
+          : intel.length
+            ? `No intelligence source answered (${intelFailed} unavailable or not configured)`
+            : `${coverage.answered} of ${coverage.planned} analysers answered`;
 
     return {
       summary,

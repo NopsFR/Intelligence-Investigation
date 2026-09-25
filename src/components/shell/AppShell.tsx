@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop rail */}
-      <aside style={{ viewTransitionName: "shell-rail" }} className="fixed inset-y-0 left-0 z-30 hidden w-[var(--rail-w)] flex-col border-r border-line-1 bg-ink-1 transition-[width] duration-200 ease-[var(--ease-out-quint)] lg:flex">
+      <aside style={{ viewTransitionName: "shell-rail" }} className="no-print fixed inset-y-0 left-0 z-30 hidden w-[var(--rail-w)] flex-col border-r border-line-1 bg-ink-1 transition-[width] duration-200 ease-[var(--ease-out-quint)] lg:flex">
         <div className={cx("flex h-[var(--topbar-h)] items-center border-b border-line-1", collapsed ? "justify-center" : "px-4")}>
           <Link href="/" aria-label="NOPS home">
             <Wordmark collapsed={collapsed} />
@@ -161,8 +161,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-[var(--ease-out-quint)] lg:pl-[var(--rail-w)]">
-        <header style={{ viewTransitionName: "shell-topbar" }} className="sticky top-0 z-20 flex h-[var(--topbar-h)] items-center gap-2 border-b border-line-1 bg-[color-mix(in_srgb,var(--color-ink-0)_88%,transparent)] px-3 backdrop-blur-md sm:px-4">
+      <div className="print-reset flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ease-[var(--ease-out-quint)] lg:pl-[var(--rail-w)]">
+        <header style={{ viewTransitionName: "shell-topbar" }} className="no-print sticky top-0 z-20 flex h-[var(--topbar-h)] items-center gap-2 border-b border-line-1 bg-[color-mix(in_srgb,var(--color-ink-0)_88%,transparent)] px-3 backdrop-blur-md sm:px-4">
           <button type="button" className="btn btn-ghost btn-icon lg:hidden" onClick={() => setDrawer(true)} aria-label="Open navigation">
             <Menu size={16} />
           </button>

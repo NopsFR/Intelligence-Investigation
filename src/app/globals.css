@@ -566,4 +566,10 @@
   .no-print {
     display: none !important;
   }
+  .print-reset {
+    padding: 0 !important;
+  }
+  .report {
+    color: #111 !important;
+  }
 }

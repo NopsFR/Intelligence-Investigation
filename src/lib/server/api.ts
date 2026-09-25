@@ -32,6 +32,11 @@ export function handler<Ctx>(fn: (req: NextRequest, ctx: Ctx) => Promise<Respons
       if (err instanceof z.ZodError) {
         return json({ error: { code: "invalid-request", message: err.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ") } }, { status: 400 });
       }
+      const name = (err as Error)?.name ?? "";
+      if (name === "PrismaClientInitializationError" || /Can't reach database server|ECONNREFUSED/.test((err as Error)?.message ?? "")) {
+        log("error", "database unavailable", { path: req.nextUrl.pathname });
+        return json({ error: { code: "database-unavailable", message: "The database is not reachable right now. Live results cannot be stored or loaded until it is back." } }, { status: 503 });
+      }
       log("error", "unhandled API error", { path: req.nextUrl.pathname, error: (err as Error)?.message });
       return json({ error: { code: "internal-error", message: "The request could not be completed." } }, { status: 500 });
     }

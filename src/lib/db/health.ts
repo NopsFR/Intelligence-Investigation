@@ -125,8 +125,9 @@ export async function observatorySnapshot(): Promise<{ providers: ProviderSnapsh
   const providers = await Promise.all(
     PROVIDERS.map(async (def): Promise<ProviderSnapshot> => {
       const h = healthBy.get(def.id);
-      const mine = usage.filter((u) => u.provider === def.id);
-      const live = mine.filter((u) => !u.cached && u.latencyMs !== null && u.status !== "SKIPPED" && u.status !== "NOT_CONFIGURED").map((u) => u.latencyMs!).sort((a, b) => a - b);
+      // Only real calls count as usage; "not configured" and "not applicable" rows never left the server.
+      const mine = usage.filter((u) => u.provider === def.id && u.status !== "NOT_CONFIGURED" && u.status !== "SKIPPED");
+      const live = mine.filter((u) => !u.cached && u.latencyMs !== null).map((u) => u.latencyMs!).sort((a, b) => a - b);
       const byStatus: Record<string, number> = {};
       for (const u of mine) byStatus[u.status] = (byStatus[u.status] ?? 0) + 1;
       const answered = mine.filter((u) => ["SUCCESS", "PARTIAL", "EMPTY"].includes(u.status)).length;
