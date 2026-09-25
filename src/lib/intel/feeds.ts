@@ -127,12 +127,14 @@ export const THREATFOX_RECENT_URL = "https://threatfox.abuse.ch/export/json/rece
 
 export const threatFoxRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxSchema, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024 });
+  const raw = Object.values(data).flat();
   // A small number of ThreatFox export rows omit the ioc/ioc_type fields; those carry
   // no usable indicator, so they are dropped rather than surfaced as blank rows.
-  const entries = Object.values(data)
-    .flat()
-    .filter((e): e is ThreatFoxEntry & { ioc: string; ioc_type: string } => Boolean(e.ioc && e.ioc_type));
-  return { entries, count: entries.length };
+  const entries = raw.filter((e): e is ThreatFoxEntry & { ioc: string; ioc_type: string } => Boolean(e.ioc && e.ioc_type));
+  // Surface a diagnostic sample rather than a silent "0 results" if the upstream shape
+  // ever drifts again and every raw row gets filtered out.
+  const diagnostics = entries.length === 0 && raw.length > 0 ? { rawCount: raw.length, sample: JSON.stringify(raw[0]).slice(0, 300) } : undefined;
+  return { entries, count: entries.length, ...(diagnostics ? { diagnostics } : {}) };
 });
 
 const urlhausEntry = z.object({
@@ -156,7 +158,8 @@ export const urlhausRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
   const raw = Array.isArray(data) ? data : Object.values(data).flat();
   const entries = raw.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
-  return { entries, count: entries.length };
+  const diagnostics = entries.length === 0 && raw.length > 0 ? { rawCount: raw.length, sample: JSON.stringify(raw[0]).slice(0, 300) } : undefined;
+  return { entries, count: entries.length, ...(diagnostics ? { diagnostics } : {}) };
 });
 
 export interface BazaarEntry {
