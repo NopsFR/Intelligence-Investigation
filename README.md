@@ -1,8 +1,10 @@
 # NOPS / Cyber Intelligence
 
-An evidence-based threat-intelligence and investigation workstation. Paste an IP address, domain, URL, email address, file hash, CVE, ASN or certificate fingerprint; NOPS works out what it is, queries the sources that can say something about it, and turns their answers into findings that cite their evidence and their source.
+An evidence-based defensive cybersecurity workstation. Paste an IP address, domain, URL, email address, file hash, CVE, ASN or certificate fingerprint; NOPS works out what it is, queries the sources that can say something about it, and turns their answers into findings that cite their evidence and their source. Beyond observable investigation, it's a full workstation: static malware/binary analysis, packet capture analysis, detection engineering (YARA/Sigma), code and dependency security scanning, DFIR case management, and hands-on labs — all run locally in the browser or against authenticated provider APIs, never by scraping or fabricating data.
 
 There is no "threat score". Every finding states what was found, why it matters, the evidence, which source reported it and when. A source that answers with nothing is recorded as *no result*; a source without credentials is *not configured* and is never called; a timeout, rate limit or malformed response is shown as exactly that.
+
+NOPS deliberately does not build offensive tooling: no brute-forcing, credential attacks, password cracking, exploit generation, unauthorized scanning, or people-search/doxxing. The Exposure workspace treats an email or domain as an investigable observable (like an IP or hash), never a person to look up: it reports breach/credential exposure evidence with source and timestamp, and never infers a person's identity or private details.
 
 ## What it does
 
@@ -16,7 +18,28 @@ There is no "threat score". Every finding states what was found, why it matters,
 - **Evidence graph** — every edge is a relationship reported by a source, with its evidence and provenance. Hover to trace a neighbourhood, select to read evidence and pivot, focus mode, entity-type filters, bounded to the 120 entities nearest the observable.
 - **MITRE ATT&CK** — Enterprise v19.2 bundled locally: full matrix, search, entity pages with procedures, and mapping of malware families named by sources to ATT&CK software and techniques (groups are shown as documented users, never as attribution).
 - **API Observatory** — per-source authentication state, real connection tests, latency history, 24 h usage from actual investigations, local request budgets and last error.
-- **History and comparison**, **IOC library** (text extraction, tags, CSV/JSON/STIX 2.1 export), **exports** (Markdown report with defanged observables, findings CSV, full JSON, printable report), and a **toolbox** (defang/refang, extractor, live DoH lookup, IPv4 subnet calculator, CVSS vector decoder, Base64/URL/epoch decoding).
+- **History and comparison**, **IOC library** (text extraction, tags, CSV/JSON/STIX 2.1 export), **exports** (Markdown report with defanged observables, findings CSV, full JSON, printable report), and a **toolbox** (defang/refang, extractor, live DoH lookup, IPv4/IPv6, MAC/OUI, CVSS vector decoder, URL parser, JWT decoder, JSON formatter, certificate decoder, regex tester with live match highlighting, and a protocol/port/HTTP-status reference).
+
+### Analysis workspaces
+- **File & binary analyzer** — PE/ELF/Mach-O static parsing (imports, sections, Authenticode/code-signature verification, TLS callbacks), hex viewer, string extraction with entropy, suspicious-API capability detection — entirely in a Web Worker, nothing uploaded, files never executed.
+- **Packet capture lab** — pcap/pcapng reader with TCP reassembly, DNS/HTTP/TLS dissection, JA3/JA4 TLS fingerprinting, conversation map, display-filter query language, beaconing detection.
+- **Detection lab** — a real YARA engine subset (differentially tested against `yara-python`) and a Sigma parser/evaluator/converter (to Splunk/KQL/Lucene), both actually run against the sample/log you provide — a match is only reported when a rule was evaluated, never assumed.
+- **Code security** — CWE-pattern findings, secret scanning, Terraform/Dockerfile/Kubernetes IaC checks, and OSV.dev dependency vulnerability lookup for npm/PyPI/Go/crates.io/Packagist/RubyGems/Maven manifests.
+- **Web security observatory** — standalone authorized-URL scanner (headers, cookies, TLS, CORS, CSP, security.txt, robots.txt, tech-stack indicators) reusing the same SSRF-safe fetch primitive as deep investigations.
+- **Malware** — hash lookup against MalwareBazaar/VirusTotal/ThreatFox/YARAify/CIRCL Hashlookup via the investigation pipeline, plus a recent-samples feed filterable by family; static analysis of an actual file happens in the File & binary analyzer.
+- **Exposure** — email breach/credential exposure via HIBP's authenticated per-account API (with stealer-log indicators) and its keyless domain-wide breach catalogue, a disposable-email check, and a k-anonymity password-exposure check (only a SHA-1 prefix ever leaves the browser). Never a people-search: no address, phone number, or geolocation lookup.
+- **DFIR workbench** — timeline builder, hash comparison, process-tree reconstruction (parses `ps`/`tasklist`-style exports), and a Windows Event ID reference.
+- **Cases** — incident case management: notes, evidence, chain-of-custody entries, timeline events.
+- **Threat feed & Vulnerabilities** — live abuse.ch (ThreatFox/URLhaus/MalwareBazaar/Feodo), NVD/CVE.org/CISA KEV/EPSS, each with source and retrieval timestamp.
+
+### Labs & knowledge base
+- **Decoder lab** — chained auto-detecting decode workspace (base64, hex, binary, URL, HTML entities, unicode escapes, quoted-printable, ROT13, JWT).
+- **Crypto lab** — hashing/HMAC, XOR (with single-byte brute force), AES-GCM/CBC/CTR, RSA-OAEP/PSS, all via WebCrypto in the browser.
+- **Exercises** — six local, isolated vulnerability exercises (SQL injection, XSS, path traversal, IDOR, insecure deserialization, command injection), each showing a vulnerable function next to its fix against fake in-memory data — never a real SQL engine, shell, or network call, and never a tool that attacks an external target.
+- **Security encyclopedia** (`/knowledge`) — 26 articles structured as what/why/how/detection/defence with cross-references and citations (CWE, MITRE ATT&CK, RFCs, OWASP).
+- **Reverse engineering reference** (`/knowledge/re`) — x86-64/ARM64 registers, common instructions, calling conventions, a curated Linux syscall table, and the Windows API catalogue used by the binary analyzer's import annotations.
+- **Command reference** (`/knowledge/commands`) — defensive commands/filters across Linux, PowerShell, Wireshark, tcpdump, Git, OpenSSL.
+- **References** (`/knowledge/reference`) — file-signature (magic bytes) table and a security regex pattern library.
 
 ## Sources
 
@@ -41,6 +64,8 @@ There is no "threat score". Every finding states what was found, why it matters,
 | AbuseIPDB | Abuse confidence, report categories, Tor exits | **required** | quick + deep |
 | GreyNoise Community | Internet scanner / RIOT (known benign service) classification | optional | quick + deep |
 | AlienVault OTX | Community pulses, malware families, ATT&CK technique tags, allowlist validation | optional | quick (IP, hashes) + deep |
+| Web of Trust (WOT) | Crowd-sourced domain/URL safety status, score, risk categories | **required** (key + user ID) | quick + deep |
+| mnemonic PassiveDNS · urlscan.io | Historical DNS resolutions; URL scan search | none | quick + deep |
 | ThreatFox · URLhaus · MalwareBazaar (abuse.ch) | IOC listings, malware URLs, known samples | **required** (one abuse.ch Auth-Key) | quick + deep |
 | Feodo Tracker (abuse.ch) | Botnet C2 blocklist (public feed) | none | quick + deep |
 | YARAify (abuse.ch) | YARA and ClamAV hits for hashes | optional | quick + deep |
@@ -70,8 +95,15 @@ src/
     observables/            Detection, IP classification, URL analysis, extraction, fanging
     net/                    SSRF policy (connect-time address checks), target + provider HTTP clients
     dns/                    RFC 1035 wire codec, DoH resolvers, email-auth parsers
-    web/headers.ts          Security header evaluation
-    intel/                  ATT&CK index, CVSS parsing, KEV/Feodo feed caches
+    web/                    Security header evaluation (headers.ts) and standalone web security analysis (cookies, TLS, CORS, CSP)
+    intel/                  ATT&CK index, CVSS parsing, feed caches (KEV, Feodo, ThreatFox, URLhaus, MalwareBazaar, HIBP, OUI), email exposure
+    analysis/               PE/ELF/Mach-O parsers, ASN.1/DER, hash/string/magic-byte utilities, capability catalogue
+    pcap/                   pcap/pcapng reader, protocol dissectors, TCP reassembly, JA3/JA4, display filters
+    detection/              YARA engine, Sigma parser/evaluator/converter
+    codesec/                Secret scanning, IaC checks, manifest parsing for OSV lookups
+    dfir/                   Timeline, hash compare, process tree, Windows Event ID reference
+    labs/                   Decoder, crypto, and vulnerability-exercise logic
+    knowledge/              Encyclopedia articles, RE reference, command reference data
     providers/
       external/ native/ derived/   One definition per source
       runtime.ts            Execution: auth, cache, quotas, timeouts, error classification
@@ -122,6 +154,8 @@ npm run dev
 | `ABUSEIPDB_API_KEY` | AbuseIPDB (required for that source). |
 | `ABUSECH_AUTH_KEY` | abuse.ch Auth-Key for ThreatFox, URLhaus, MalwareBazaar (per-product aliases `THREATFOX_API_KEY`, `URLHAUS_API_KEY`, `MALWAREBAZAAR_API_KEY`, `YARAIFY_API_KEY` are also read). |
 | `OTX_API_KEY`, `NVD_API_KEY`, `GREYNOISE_API_KEY`, `CERTSPOTTER_API_KEY` | Optional; raise limits or unlock more data. |
+| `HIBP_API_KEY` | Have I Been Pwned per-account breach lookups (required for that check; the keyless domain-wide catalogue works without it). |
+| `WOT_API_KEY`, `WOT_USER_ID` | Web of Trust domain/URL reputation (both required for that source). |
 
 ### Command line
 
@@ -147,7 +181,7 @@ The end-to-end suite runs flows that are deterministic offline (private-address 
 
 ## Deployment
 
-Deployed on Vercel (region `lhr1`, next to the Supabase database in eu-west-2). Build command is the default `next build`; migrations are applied explicitly with `npx prisma migrate deploy` using `DIRECT_URL`, not during the build. Set `DATABASE_URL`, `NOPS_ADMIN_TOKEN`, `NOPS_SESSION_SECRET` and any provider keys in the project's environment variables.
+Deployed on Vercel (region `lhr1`, next to the Supabase database in eu-west-2). Build command is the default `next build`; migrations are **not** applied during the build (`postinstall` only runs `prisma generate`) — **run `npx prisma migrate deploy` against `DIRECT_URL` after adding a migration, before or as part of deploying it**, or the new tables simply won't exist in production while the app otherwise builds and deploys successfully. Set `DATABASE_URL`, `NOPS_ADMIN_TOKEN`, `NOPS_SESSION_SECRET` and any provider keys in the project's environment variables.
 
 ## Limitations
 
