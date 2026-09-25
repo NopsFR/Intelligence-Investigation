@@ -59,3 +59,5 @@ export const osvQuerySchema = z.object({
 
 export const exposureDomainSchema = z.object({ domain: z.string().trim().min(1).max(253) });
 export const exposurePasswordSchema = z.object({ prefix: z.string().trim().regex(/^[0-9A-Fa-f]{5}$/, "prefix must be exactly 5 hex characters") });
+
+export const webSecuritySchema = z.object({ url: z.string().trim().min(1).max(2048) });
