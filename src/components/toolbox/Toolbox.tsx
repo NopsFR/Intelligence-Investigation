@@ -1,6 +1,6 @@
 "use client";
 
-import { Binary, Braces, Calculator, FileInput, Fingerprint, Globe, KeyRound, Link2, Loader2, Radar, Shield, ShieldOff, Wifi } from "lucide-react";
+import { Binary, Braces, Calculator, FileInput, Fingerprint, Globe, KeyRound, Link2, Loader2, Radar, Regex, Shield, ShieldOff, Wifi } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import type { ObservableType } from "@/lib/core/types";
@@ -28,6 +28,7 @@ const TOOLS: { id: string; label: string; icon: ReactNode; hint: string }[] = [
   { id: "json", label: "JSON", icon: <Braces size={14} />, hint: "Format, validate and minify" },
   { id: "cert", label: "Certificate", icon: <Shield size={14} />, hint: "Decode a PEM certificate" },
   { id: "ref", label: "References", icon: <FileInput size={14} />, hint: "TCP flags, HTTP status, ports and protocols" },
+  { id: "regex", label: "Regex tester", icon: <Regex size={14} />, hint: "Test a pattern against text, with live match highlighting" },
 ];
 
 function Output({ value, label = "Result" }: { value: string; label?: string }) {
@@ -572,6 +573,71 @@ function CertTool() {
   );
 }
 
+function RegexTool() {
+  const [pattern, setPattern] = useState("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b");
+  const [flags, setFlags] = useState("g");
+  const [text, setText] = useState("Server 10.0.0.1 talked to 203.0.113.9 twice.");
+
+  const result = useMemo(() => {
+    try {
+      const re = new RegExp(pattern, flags.includes("g") ? flags : `${flags}g`);
+      const matches = [...text.matchAll(re)];
+      return { ok: true as const, matches, re };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  }, [pattern, flags, text]);
+
+  const segments: { text: string; match: boolean }[] = [];
+  if (result.ok) {
+    let last = 0;
+    for (const m of result.matches) {
+      const start = m.index ?? 0;
+      if (start > last) segments.push({ text: text.slice(last, start), match: false });
+      segments.push({ text: m[0], match: true });
+      last = start + m[0].length;
+    }
+    if (last < text.length) segments.push({ text: text.slice(last), match: false });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-2">
+        <input className="input mono h-9 flex-1" value={pattern} onChange={(e) => setPattern(e.target.value)} aria-label="Regex pattern" spellCheck={false} />
+        <input className="input mono h-9 w-20" value={flags} onChange={(e) => setFlags(e.target.value.replace(/[^a-z]/gi, ""))} aria-label="Regex flags" placeholder="flags" spellCheck={false} />
+      </div>
+      <textarea className="input mono min-h-[120px] text-[12.5px]" value={text} onChange={(e) => setText(e.target.value)} aria-label="Text to test against" spellCheck={false} />
+      {!result.ok ? (
+        <ErrorNote title="Invalid pattern">{result.error}</ErrorNote>
+      ) : (
+        <>
+          <div className="mono min-h-[60px] rounded-[2px] bg-ink-0 p-3 text-[12.5px] leading-relaxed break-all whitespace-pre-wrap text-fg-2 shadow-[inset_0_0_0_1px_var(--color-line-1)]">
+            {segments.length ? (
+              segments.map((s, i) => (s.match ? <mark key={i} className="rounded-[1px] bg-signal/25 text-fg-1">{s.text}</mark> : <span key={i}>{s.text}</span>))
+            ) : (
+              <span className="text-fg-4">—</span>
+            )}
+          </div>
+          <div className="label">
+            {result.matches.length} match{result.matches.length === 1 ? "" : "es"}
+          </div>
+          {result.matches.length > 0 && (
+            <ul className="flex flex-col divide-y divide-line-1 rounded-[2px] border border-line-1">
+              {result.matches.slice(0, 50).map((m, i) => (
+                <li key={i} className="flex flex-wrap items-baseline gap-2 px-3 py-1.5 text-xs">
+                  <span className="mono text-fg-4">#{i + 1}</span>
+                  <span className="mono text-fg-1">{m[0]}</span>
+                  {m.length > 1 && <span className="mono text-fg-3">groups: {m.slice(1).map((g) => g ?? "—").join(", ")}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const TCP_FLAGS_REF = [
   { bit: "FIN", value: "0x01", meaning: "No more data from sender; graceful connection close." },
   { bit: "SYN", value: "0x02", meaning: "Synchronise sequence numbers; sent to start a connection." },
@@ -681,6 +747,7 @@ export function Toolbox() {
         {tool === "json" && <JsonTool />}
         {tool === "cert" && <CertTool />}
         {tool === "ref" && <ReferenceTool />}
+        {tool === "regex" && <RegexTool />}
       </section>
     </div>
   );
