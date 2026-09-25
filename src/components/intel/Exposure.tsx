@@ -1,13 +1,13 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Clock, Database, Eye, EyeOff, FileSearch, KeyRound, Mail, Search, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Clock, Database, Eye, EyeOff, KeyRound, Mail, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { api, ApiClientError } from "@/lib/client/api";
 import { registrableDomain } from "@/lib/observables/detect";
-import { useInvestigate } from "@/lib/client/investigate";
 import { ErrorNote, Panel } from "@/components/ui/primitives";
 import { Chip, Mono } from "../analysis/common";
 import { Time } from "../ui/Time";
+import { EmbeddedDomainIntel } from "./EmbeddedDomainIntel";
 
 interface DomainBreach {
   name: string;
@@ -98,8 +98,6 @@ function StatusChip({ status }: { status: string }) {
 function EmailExposure() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<{ phase: "idle" } | { phase: "loading" } | { phase: "done"; result: EmailExposureResult } | { phase: "error"; message: string }>({ phase: "idle" });
-  const { start, pending } = useInvestigate();
-
   const run = async (raw: string) => {
     const value = raw.trim();
     if (!value) return;
@@ -224,16 +222,16 @@ function EmailExposure() {
             </Panel>
 
             {/* Domain-wide exposure + full investigation handoff */}
-            <Panel title="Domain exposure & threat intelligence" meta={<StatusChip status={state.result.domainExposure.status} />} bodyClassName="p-0">
+            <Panel title="Domain-wide breach exposure" meta={<StatusChip status={state.result.domainExposure.status} />} bodyClassName="p-0">
               <div className="flex flex-col gap-2 p-[var(--panel-pad)] text-sm text-fg-2">
                 <p className="text-xs text-fg-4">{state.result.domainExposure.note}</p>
                 <p>{state.result.domainExposure.breachCount} domain-wide breach{state.result.domainExposure.breachCount === 1 ? "" : "es"} attributed to {state.result.domain}.</p>
               </div>
-              <div className="flex flex-wrap gap-2 border-t border-line-1 px-[var(--panel-pad)] py-2.5">
-                <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => void start(state.result.domain, "QUICK", { type: "DOMAIN" })}>
-                  <FileSearch size={13} /> RDAP, DNS, SPF/DKIM/DMARC, certificates, threat intel for {state.result.domain} <ArrowRight size={12} />
-                </button>
-              </div>
+            </Panel>
+
+            {/* Domain & threat intelligence — a real, live investigation of the domain, embedded */}
+            <Panel title="Domain & threat intelligence" meta={`RDAP, DNS, certificates, reputation & IOC sources for ${state.result.domain}`} bodyClassName="p-0">
+              <EmbeddedDomainIntel key={state.result.domain} domain={state.result.domain} />
             </Panel>
 
             {/* Timeline */}
