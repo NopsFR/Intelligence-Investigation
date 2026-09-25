@@ -72,6 +72,20 @@ export interface AttackMitigation {
   url: string;
 }
 
+export interface AttackAnalytic {
+  id: string;
+  platforms: string[];
+  description: string;
+  logSources: { component: string | null; name: string; channel: string }[];
+}
+
+export interface AttackDetectionStrategy {
+  id: string;
+  name: string;
+  url: string;
+  analytics: AttackAnalytic[];
+}
+
 type RelationshipTuple = [source: string, type: "uses" | "mitigates" | "attributed-to" | string, target: string, procedure?: string];
 
 interface AttackDataset {
@@ -82,10 +96,11 @@ interface AttackDataset {
   software: AttackSoftware[];
   campaigns: AttackCampaign[];
   mitigations: AttackMitigation[];
+  detectionStrategies?: AttackDetectionStrategy[];
   relationships: RelationshipTuple[];
 }
 
-export type AttackEntityKind = "tactic" | "technique" | "group" | "software" | "campaign" | "mitigation";
+export type AttackEntityKind = "tactic" | "technique" | "group" | "software" | "campaign" | "mitigation" | "detection";
 
 export interface AttackEdge {
   id: string;
@@ -100,6 +115,9 @@ export interface AttackIndex {
   software: Map<string, AttackSoftware>;
   campaigns: Map<string, AttackCampaign>;
   mitigations: Map<string, AttackMitigation>;
+  detections: Map<string, AttackDetectionStrategy>;
+  /** technique id → detection strategies. */
+  detectedBy: Map<string, string[]>;
   /** source id → targets it uses (techniques, software). */
   uses: Map<string, AttackEdge[]>;
   /** target id → sources that use it. */
@@ -145,6 +163,8 @@ function build(data: AttackDataset): AttackIndex {
     software: new Map(data.software.map((s) => [s.id, s])),
     campaigns: new Map(data.campaigns.map((c) => [c.id, c])),
     mitigations: new Map(data.mitigations.map((m) => [m.id, m])),
+    detections: new Map((data.detectionStrategies ?? []).map((d) => [d.id, d])),
+    detectedBy: new Map(),
     uses: new Map(),
     usedBy: new Map(),
     mitigatedBy: new Map(),
@@ -162,6 +182,8 @@ function build(data: AttackDataset): AttackIndex {
     } else if (type === "mitigates") {
       push(index.mitigatedBy, target, { id: source, procedure });
       push(index.mitigates, source, { id: target, procedure });
+    } else if (type === "detects") {
+      push(index.detectedBy, target, source);
     } else if (type === "attributed-to") {
       push(index.attributedTo, source, target);
       push(index.campaignsOf, target, source);
@@ -201,6 +223,7 @@ export function entityKind(id: string): AttackEntityKind | null {
   if (/^S\d{4}$/.test(id)) return "software";
   if (/^C\d{4}$/.test(id)) return "campaign";
   if (/^M\d{4}$/.test(id)) return "mitigation";
+  if (/^DET\d{4}$/.test(id)) return "detection";
   return null;
 }
 
@@ -239,6 +262,7 @@ export function searchAttack(index: AttackIndex, q: string, limit = 25): AttackS
   for (const s of index.software.values()) consider(s.id, "software", s.name, s.aliases, s.kind === "malware" ? "Malware" : "Tool");
   for (const c of index.campaigns.values()) consider(c.id, "campaign", c.name, c.aliases ?? [], "Campaign");
   for (const m of index.mitigations.values()) consider(m.id, "mitigation", m.name, [], "Mitigation");
+  for (const d of index.detections.values()) consider(d.id, "detection", d.name, [], "Detection strategy");
   return hits.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, limit);
 }
 
@@ -258,6 +282,7 @@ function named(index: AttackIndex, id: string): { name: string; kind: AttackEnti
     : kind === "software" ? index.software.get(id)
     : kind === "campaign" ? index.campaigns.get(id)
     : kind === "mitigation" ? index.mitigations.get(id)
+    : kind === "detection" ? index.detections.get(id)
     : index.tactics.find((t) => t.id === id);
   return e ? { name: e.name, kind } : null;
 }
@@ -274,7 +299,8 @@ function relate(index: AttackIndex, edges: AttackEdge[] | undefined, kind?: Atta
 export interface AttackEntityDetails {
   id: string;
   kind: AttackEntityKind;
-  entity: AttackTactic | AttackTechnique | AttackGroup | AttackSoftware | AttackCampaign | AttackMitigation;
+  entity: AttackTactic | AttackTechnique | AttackGroup | AttackSoftware | AttackCampaign | AttackMitigation | AttackDetectionStrategy;
+  detections?: AttackDetectionStrategy[];
   tactics?: AttackTactic[];
   parent?: RelatedEntity;
   subtechniques?: RelatedEntity[];
@@ -312,6 +338,7 @@ export function attackDetails(index: AttackIndex, id: string): AttackEntityDetai
         software: relate(index, users, "software"),
         campaigns: relate(index, users, "campaign"),
         mitigations: relate(index, index.mitigatedBy.get(id), "mitigation"),
+        detections: (index.detectedBy.get(id) ?? []).map((d) => index.detections.get(d)).filter((d): d is AttackDetectionStrategy => Boolean(d)),
       };
     }
     case "group": {
@@ -349,6 +376,12 @@ export function attackDetails(index: AttackIndex, id: string): AttackEntityDetai
       const m = index.mitigations.get(id);
       if (!m) return null;
       return { id, kind, entity: m, techniques: relate(index, index.mitigates.get(id), "technique") };
+    }
+    case "detection": {
+      const d = index.detections.get(id);
+      if (!d) return null;
+      const techniques = [...index.detectedBy.entries()].filter(([, dets]) => dets.includes(id)).map(([t]) => ({ id: t, name: index.techniques.get(t)?.name ?? t, kind: "technique" as const }));
+      return { id, kind, entity: d, techniques };
     }
   }
 }

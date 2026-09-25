@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsLeft, ChevronsRight, Lock, Menu, Search, Unlock, X } from "lucide-react";
+import { ChevronRight, ChevronsLeft, ChevronsRight, Lock, Menu, Search, Unlock, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -10,43 +10,89 @@ import { useSession } from "@/lib/client/session";
 import { CommandBar } from "./CommandBar";
 import { CommandPalette } from "./CommandPalette";
 import { Wordmark } from "./Logo";
-import { NAV, isActive } from "./nav";
+import { NAV, NAV_ITEMS, activeGroup, isActive } from "./nav";
 import { StatusBar } from "./StatusBar";
+
+const NAV_OPEN_KEY = "nops.nav.closed.v1";
 
 function RailNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const path = usePathname();
+  const current = activeGroup(path);
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore collapsed groups after hydration
+      setClosed(new Set(JSON.parse(localStorage.getItem(NAV_OPEN_KEY) ?? "[]") as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggle = (id: string) =>
+    setClosed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(NAV_OPEN_KEY, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  // The item that best matches the path is the only one marked current.
+  const activeHref = NAV_ITEMS.filter((i) => isActive(i, path)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
-    <nav aria-label="Primary" className="flex-1 overflow-y-auto px-2 py-3">
-      {NAV.map((group) => (
-        <div key={group.group} className="mb-4">
-          {!collapsed ? <div className="label px-2.5 pb-1.5 text-fg-4">{group.group}</div> : <div className="mx-auto mb-2 h-px w-5 bg-line-2" aria-hidden />}
-          <ul className="flex flex-col gap-px">
-            {group.items.map((item) => {
-              const active = isActive(item, path);
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    title={collapsed ? item.label : undefined}
-                    className={cx(
-                      "group relative flex h-[32px] items-center gap-3 rounded-[3px] text-sm transition-colors",
-                      collapsed ? "justify-center px-0" : "px-2.5",
-                      active ? "bg-ink-3 text-fg-1" : "text-fg-3 hover:bg-ink-2 hover:text-fg-1"
-                    )}
-                  >
-                    {active && <span aria-hidden className="absolute top-[7px] bottom-[7px] -left-2 w-[2px] rounded-r-[1px] bg-signal" />}
-                    <Icon size={16} strokeWidth={active ? 2 : 1.75} className="shrink-0" />
-                    {!collapsed && <span className="truncate font-medium">{item.label}</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+    <nav aria-label="Primary" className="flex-1 overflow-y-auto px-2 py-3" style={{ scrollbarWidth: "none" }}>
+      {NAV.map((group) => {
+        const open = collapsed || !closed.has(group.id) || group.id === current;
+        const groupId = `nav-${group.id}`;
+        return (
+          <div key={group.id} className="mb-2.5">
+            {!collapsed ? (
+              <button
+                type="button"
+                onClick={() => toggle(group.id)}
+                aria-expanded={open}
+                aria-controls={groupId}
+                className="label group flex w-full items-center gap-1.5 rounded-[2px] px-2.5 pt-1 pb-1.5 text-left text-fg-4 transition-colors hover:text-fg-2"
+              >
+                <ChevronRight size={10} className={cx("transition-transform duration-200", open && "rotate-90")} aria-hidden />
+                {group.label}
+              </button>
+            ) : (
+              <div className="mx-auto mb-2 h-px w-5 bg-line-2" aria-hidden />
+            )}
+            <div id={groupId} className="grid transition-[grid-template-rows] duration-300 ease-[var(--ease-out-quint)]" style={{ gridTemplateRows: open ? "1fr" : "0fr" }}>
+              <ul className="flex flex-col gap-px overflow-hidden" inert={!open}>
+                {group.items.map((item) => {
+                  const active = item.href === activeHref;
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
+                        title={collapsed ? `${item.label} — ${item.hint}` : item.hint}
+                        className={cx(
+                          "group relative flex h-[30px] items-center gap-3 rounded-[3px] text-[13px] transition-colors",
+                          collapsed ? "justify-center px-0" : "px-2.5",
+                          active ? "bg-ink-3 text-fg-1" : "text-fg-3 hover:bg-ink-2 hover:text-fg-1"
+                        )}
+                      >
+                        {active && <span aria-hidden className="absolute top-[7px] bottom-[7px] -left-2 w-[2px] rounded-r-[1px] bg-signal" />}
+                        <Icon size={15} strokeWidth={active ? 2 : 1.75} className="shrink-0" />
+                        {!collapsed && <span className="truncate font-medium">{item.label}</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </nav>
   );
 }
@@ -100,7 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (chord) {
         chord = false;
         clearTimeout(timer);
-        const item = NAV.flatMap((g) => g.items).find((i) => i.shortcut?.toLowerCase() === `g ${e.key.toLowerCase()}`);
+        const item = NAV_ITEMS.find((i) => i.shortcut?.toLowerCase() === `g ${e.key.toLowerCase()}`);
         if (item) {
           e.preventDefault();
           router.push(item.href);

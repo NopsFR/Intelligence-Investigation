@@ -113,12 +113,38 @@ const mitigations = objects
   .map((m) => ({ id: externalId(m), name: m.name, description: clean(m.description), url: attackUrl(m) }))
   .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 
+// Detection strategies (ATT&CK v18+): each bundles platform-specific analytics
+// with the log sources they need. Linked to techniques by "detects" relationships.
+const dataComponents = new Map(objects.filter((o) => o.type === "x-mitre-data-component").map((d) => [d.id, { id: externalId(d), name: d.name }]));
+const analytics = new Map(objects.filter((o) => o.type === "x-mitre-analytic").map((a) => [a.id, a]));
+const detectionStrategies = objects
+  .filter((o) => o.type === "x-mitre-detection-strategy" && externalId(o))
+  .map((d) => ({
+    id: externalId(d),
+    name: d.name,
+    url: attackUrl(d),
+    analytics: (d.x_mitre_analytic_refs ?? [])
+      .map((ref) => analytics.get(ref))
+      .filter(Boolean)
+      .map((a) => ({
+        id: externalId(a),
+        platforms: a.x_mitre_platforms ?? [],
+        description: clean(a.description),
+        logSources: (a.x_mitre_log_source_references ?? []).map((l) => ({
+          component: dataComponents.get(l.x_mitre_data_component_ref)?.name ?? null,
+          name: l.name,
+          channel: l.channel,
+        })),
+      })),
+  }))
+  .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+
 // Relationships are stored as [sourceId, type, targetId, procedure?] tuples keyed by
 // ATT&CK IDs so the runtime never needs STIX identifiers.
 const relationships = [];
 for (const r of objects) {
   if (r.type !== "relationship") continue;
-  if (!["uses", "mitigates", "attributed-to"].includes(r.relationship_type)) continue;
+  if (!["uses", "mitigates", "attributed-to", "detects"].includes(r.relationship_type)) continue;
   const source = byStixId.get(r.source_ref);
   const target = byStixId.get(r.target_ref);
   if (!source || !target) continue;
@@ -146,6 +172,7 @@ const output = {
   software,
   campaigns,
   mitigations,
+  detectionStrategies,
   relationships,
 };
 
@@ -154,5 +181,5 @@ mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, JSON.stringify(output));
 console.log(
   `ATT&CK ${output.meta.version}: ${tactics.length} tactics, ${techniques.length} techniques, ${groups.length} groups, ` +
-    `${software.length} software, ${campaigns.length} campaigns, ${mitigations.length} mitigations, ${relationships.length} relationships`
+    `${software.length} software, ${campaigns.length} campaigns, ${mitigations.length} mitigations, ${detectionStrategies.length} detection strategies, ${relationships.length} relationships`
 );

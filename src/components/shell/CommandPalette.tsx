@@ -132,7 +132,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     for (const g of NAV) {
       for (const item of g.items) {
         const Icon = item.icon;
-        list.push({ id: `nav-${item.href}`, group: "Go to", label: item.label, hint: item.shortcut ? <span className="flex gap-1">{item.shortcut.split(" ").map((k) => <Kbd key={k}>{k}</Kbd>)}</span> : undefined, icon: <Icon size={15} />, keywords: `${item.label} ${g.group}`.toLowerCase(), run: go(item.href) });
+        list.push({
+          id: `nav-${item.href}`,
+          group: "Go to",
+          label: (
+            <span className="flex items-baseline gap-2">
+              {item.label}
+              <span className="hidden truncate text-xs text-fg-4 sm:inline">{item.hint}</span>
+            </span>
+          ),
+          hint: item.shortcut ? <span className="flex gap-1">{item.shortcut.split(" ").map((k) => <Kbd key={k}>{k}</Kbd>)}</span> : <span className="label text-fg-4">{g.label}</span>,
+          icon: <Icon size={15} />,
+          keywords: `${item.label} ${g.label} ${item.hint}`.toLowerCase(),
+          run: go(item.href),
+        });
       }
     }
     list.push(
