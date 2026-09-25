@@ -217,3 +217,52 @@ model RateLimitBucket {
   @@id([key, windowStart])
   @@index([expiresAt])
 }
+
+enum CaseStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum CaseItemKind {
+  NOTE
+  EVIDENCE
+  CUSTODY
+  EVENT
+  LINK
+}
+
+/// A DFIR case: the container for an investigation's notes, evidence,
+/// chain-of-custody log and timeline. Everything is written by the operator
+/// (there is no multi-user auth), so "author" is a free-text label.
+model Case {
+  id          String     @id @default(cuid())
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  title       String
+  description String?
+  status      CaseStatus @default(OPEN)
+  severity    String? // Severity, optional (a case may predate a scored finding)
+  tags        Json? // string[]
+  items       CaseItem[]
+
+  @@index([status, updatedAt])
+}
+
+/// One entry in a case's record: a note, an evidence reference (hash, file,
+/// observable, or investigation link), a chain-of-custody action, a
+/// timeline event, or a link to another investigation/IOC.
+model CaseItem {
+  id        String       @id @default(cuid())
+  caseId    String
+  case      Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind      CaseItemKind
+  createdAt DateTime     @default(now())
+  author    String       @default("operator")
+  /// Kind-specific payload: NOTE {text}; EVIDENCE {label,sha256?,sha1?,md5?,description?,source?};
+  /// CUSTODY {action,handler,detail?}; EVENT {occurredAt,title,detail?,source?};
+  /// LINK {refType:"investigation"|"ioc",refId,label?}.
+  data      Json
+
+  @@index([caseId, createdAt])
+}
