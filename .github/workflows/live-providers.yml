@@ -1,0 +1,31 @@
+name: Live provider smoke test
+
+# Runs real investigations against the public, keyless sources from a GitHub
+# runner. Keyed sources report "Not configured" unless repository secrets are set.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    env:
+      VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+      ABUSEIPDB_API_KEY: ${{ secrets.ABUSEIPDB_API_KEY }}
+      ABUSECH_AUTH_KEY: ${{ secrets.ABUSECH_AUTH_KEY }}
+    strategy:
+      fail-fast: false
+      matrix:
+        observable: ["8.8.8.8", "2606:4700:4700::1111", "example.com", "https://example.com/", "CVE-2021-44228", "AS13335", "44d88612fea8a8f36de82e1278abb02f"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run investigate -- "${{ matrix.observable }}" --deep

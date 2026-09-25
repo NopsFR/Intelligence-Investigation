@@ -66,6 +66,7 @@ async function main() {
   console.log(capture.summary);
   const findings = all.flatMap((o) => (o.result?.findings ?? []).map((f) => ({ ...f, source: o.provider }))).sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
   for (const f of findings) console.log(`  [${f.severity.padEnd(8)}] ${f.title}  (${f.source})`);
+  if (capture.status === "FAILED") process.exitCode = 1;
 }
 
 main().catch((err) => {
