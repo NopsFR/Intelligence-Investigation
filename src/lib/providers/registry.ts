@@ -10,6 +10,7 @@ import { certSpotter, crtSh } from "./external/certificates";
 import { circlHashlookup } from "./external/circl";
 import { abuseIpDb, greyNoise, internetDb } from "./external/ip-intel";
 import { otx } from "./external/otx";
+import { mnemonicPassiveDns, urlscanSearch } from "./external/passivedns";
 import { rdap } from "./external/rdap";
 import { ripeStat } from "./external/ripestat";
 import { virusTotal } from "./external/virustotal";
@@ -36,6 +37,8 @@ export const PROVIDERS: ProviderDefinition[] = [
   // Registration & routing
   rdap,
   ripeStat,
+  mnemonicPassiveDns,
+  urlscanSearch,
   // Certificates
   certSpotter,
   crtSh,
