@@ -13,6 +13,7 @@ import { otx } from "./external/otx";
 import { mnemonicPassiveDns, urlscanSearch } from "./external/passivedns";
 import { rdap } from "./external/rdap";
 import { ripeStat } from "./external/ripestat";
+import { wot } from "./external/wot";
 import { virusTotal } from "./external/virustotal";
 import { cisaKev, cveOrg, epss, nvd } from "./external/vulnerability";
 import { dnsRecords, dnssec, reverseDns } from "./native/dns";
@@ -46,6 +47,7 @@ export const PROVIDERS: ProviderDefinition[] = [
   virusTotal,
   abuseIpDb,
   greyNoise,
+  wot,
   otx,
   threatFox,
   urlhaus,
