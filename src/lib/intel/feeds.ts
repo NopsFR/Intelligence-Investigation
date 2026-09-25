@@ -113,34 +113,43 @@ const looseTags = z
   .optional()
   .transform((v) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(",").map((t) => t.trim()).filter(Boolean) : []));
 
-const threatFoxSchema = z.record(
-  z.string(),
-  z.array(
-    z.object({
-      ioc: z.string().nullable().optional(),
-      ioc_type: z.string().nullable().optional(),
-      threat_type: z.string().nullable().optional(),
-      malware: z.string().nullable().optional(),
-      malware_printable: z.string().nullable().optional(),
-      confidence_level: z.number().nullable().optional(),
-      first_seen_utc: z.string().nullable().optional(),
-      reference: z.string().nullable().optional(),
-      tags: looseTags,
-    })
-  )
-);
-export type ThreatFoxEntry = z.infer<typeof threatFoxSchema>[string][number];
+const threatFoxIoc = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  ioc: z.string().nullable().optional(),
+  ioc_type: z.string().nullable().optional(),
+  threat_type: z.string().nullable().optional(),
+  malware: z.string().nullable().optional(),
+  malware_printable: z.string().nullable().optional(),
+  confidence_level: z.number().nullable().optional(),
+  first_seen_utc: z.string().nullable().optional(),
+  reference: z.string().nullable().optional(),
+  tags: looseTags,
+});
+const threatFoxApiResponse = z.object({
+  query_status: z.string(),
+  data: z.union([z.array(threatFoxIoc), z.string(), z.null()]).optional(),
+});
+export type ThreatFoxEntry = z.infer<typeof threatFoxIoc>;
 
-export const THREATFOX_RECENT_URL = "https://threatfox.abuse.ch/export/json/recent/";
+// The static "export/json/recent/" file abuse.ch used to publish now redacts the
+// actual indicator value from every row regardless of Auth-Key — confirmed by a
+// live diagnostic sample that had ioc_type but no ioc field at all, with or
+// without the key sent. The authenticated get_iocs query on the real API is the
+// one that still returns the full record.
+export const THREATFOX_RECENT_URL = "https://threatfox-api.abuse.ch/api/v1/";
 
 export const threatFoxRecentFeed = feed(15 * 60 * 1000, async () => {
-  const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxSchema, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024, headers: abusechHeaders() });
-  const raw = Object.values(data).flat();
-  // A small number of ThreatFox export rows omit the ioc/ioc_type fields; those carry
-  // no usable indicator, so they are dropped rather than surfaced as blank rows.
+  const key = process.env.ABUSECH_AUTH_KEY?.trim();
+  if (!key) throw new Error("ABUSECH_AUTH_KEY is not configured");
+  const { data } = await providerJson(THREATFOX_RECENT_URL, threatFoxApiResponse, {
+    method: "POST",
+    headers: { "Auth-Key": key, "content-type": "application/json" },
+    body: JSON.stringify({ query: "get_iocs", days: 3 }),
+    timeoutMs: 20_000,
+    maxBytes: 6 * 1024 * 1024,
+  });
+  const raw = Array.isArray(data.data) ? data.data : [];
   const entries = raw.filter((e): e is ThreatFoxEntry & { ioc: string; ioc_type: string } => Boolean(e.ioc && e.ioc_type));
-  // Surface a diagnostic sample rather than a silent "0 results" if the upstream shape
-  // ever drifts again and every raw row gets filtered out.
   const diagnostics = entries.length === 0 && raw.length > 0 ? { rawCount: raw.length, sample: JSON.stringify(raw[0]).slice(0, 300) } : undefined;
   return { entries, count: entries.length, ...(diagnostics ? { diagnostics } : {}) };
 });
@@ -164,7 +173,12 @@ export const URLHAUS_RECENT_URL = "https://urlhaus.abuse.ch/downloads/json_recen
 
 export const urlhausRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024, headers: abusechHeaders() });
-  const raw = Array.isArray(data) ? data : Object.values(data).flat();
+  // In the ID-keyed shape the numeric id is the record's dictionary key, not a
+  // field on the entry itself — backfill it so entries aren't dropped for
+  // lacking an "id" field they were never going to carry.
+  const raw = Array.isArray(data)
+    ? data
+    : Object.entries(data).flatMap(([key, v]) => (Array.isArray(v) ? v : [v]).map((e) => (e.id ? e : { ...e, id: key })));
   const entries = raw.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
   const diagnostics = entries.length === 0 && raw.length > 0 ? { rawCount: raw.length, sample: JSON.stringify(raw[0]).slice(0, 300) } : undefined;
   return { entries, count: entries.length, ...(diagnostics ? { diagnostics } : {}) };
