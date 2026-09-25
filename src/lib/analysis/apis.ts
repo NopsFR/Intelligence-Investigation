@@ -40,7 +40,7 @@ export const API_CATEGORY_LABEL: Record<ApiCategory, string> = {
 
 const A = (category: ApiCategory, note: string): ApiInfo => ({ category, note });
 
-const CATALOGUE: Record<string, ApiInfo> = {
+export const CATALOGUE: Record<string, ApiInfo> = {
   VirtualAllocEx: A("injection", "Allocates memory in another process"),
   VirtualProtectEx: A("injection", "Changes memory protection in another process"),
   WriteProcessMemory: A("injection", "Writes into another process's memory"),
