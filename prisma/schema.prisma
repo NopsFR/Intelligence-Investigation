@@ -1,0 +1,155 @@
+// NOPS / Cyber Intelligence — persistence schema.
+// SQLite for local development; the models avoid SQLite-incompatible
+// features so swapping the datasource to Postgres later is a one-line change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ObservableType {
+  IPV4
+  IPV6
+  DOMAIN
+  URL
+  MD5
+  SHA1
+  SHA256
+  CVE
+  ASN
+}
+
+enum InvestigationStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  PARTIAL
+  FAILED
+}
+
+enum ProviderStatus {
+  SUCCESS
+  PARTIAL
+  EMPTY
+  NOT_CONFIGURED
+  RATE_LIMITED
+  AUTH_FAILED
+  TIMEOUT
+  NETWORK_ERROR
+  INVALID_RESPONSE
+  UNAVAILABLE
+}
+
+enum InvestigationMode {
+  QUICK
+  DEEP
+}
+
+model Investigation {
+  id                  String              @id @default(cuid())
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  observable          String
+  observableType       ObservableType
+  normalizedObservable String
+  mode                InvestigationMode   @default(QUICK)
+  status              InvestigationStatus @default(PENDING)
+  summary             String?
+  metadata            String? // JSON blob: provider counts, timings, etc.
+
+  providerResults ProviderResult[]
+  findings        Finding[]
+  relationships   Relationship[]
+
+  @@index([normalizedObservable])
+  @@index([observableType])
+  @@index([createdAt])
+}
+
+model ProviderResult {
+  id              String         @id @default(cuid())
+  investigationId String
+  investigation   Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  provider        String
+  status          ProviderStatus
+  latencyMs       Int?
+  retrievedAt     DateTime       @default(now())
+  errorType       String?
+  errorMessage    String?
+  normalized      String? // JSON blob: NormalizedResult
+  raw             String? // JSON blob: sanitized raw provider payload (no secrets)
+
+  @@index([investigationId])
+  @@index([provider])
+}
+
+model Finding {
+  id              String        @id @default(cuid())
+  investigationId String
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  severity        String // CRITICAL | HIGH | MEDIUM | LOW | INFO
+  category        String
+  title           String
+  description     String
+  evidence        String
+  source          String
+  observedAt      DateTime      @default(now())
+  confidence      String? // only set when a provider supplies it
+  methodology     String?
+
+  @@index([investigationId])
+  @@index([severity])
+}
+
+model Observable {
+  id        String         @id @default(cuid())
+  value     String
+  type      ObservableType
+  firstSeen DateTime       @default(now())
+  lastSeen  DateTime       @updatedAt
+  tags      String? // JSON string array
+
+  @@unique([value, type])
+}
+
+model Relationship {
+  id              String        @id @default(cuid())
+  investigationId String
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  sourceNode      String
+  targetNode      String
+  relationType    String
+  sourceProvider  String
+  evidence        String
+  observedAt      DateTime      @default(now())
+
+  @@index([investigationId])
+}
+
+model IocEntry {
+  id                    String   @id @default(cuid())
+  value                 String
+  type                  ObservableType
+  tags                  String? // JSON string array
+  notes                 String?
+  source                String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  investigationRefIds   String? // JSON string array of Investigation ids
+
+  @@unique([value, type])
+}
+
+model ApiProviderHealth {
+  id            String   @id @default(cuid())
+  provider      String   @unique
+  configured    Boolean  @default(false)
+  lastCheckedAt DateTime?
+  lastStatus    String?
+  lastLatencyMs Int?
+  lastError     String?
+}

@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --nops-bg: #0a0a0b;
+  --nops-bg-raised: #111113;
+  --nops-bg-panel: #16161a;
+  --nops-border: #262629;
+  --nops-border-strong: #35353a;
+  --nops-text: #e7e7e5;
+  --nops-text-dim: #98989c;
+  --nops-text-faint: #616166;
+  --nops-red: #c5283d;
+  --nops-red-dim: #7c1a28;
+  --nops-red-bg: rgba(197, 40, 61, 0.1);
+  --nops-amber: #c98a2c;
+  --nops-green: #3f9c6d;
+  --nops-blue: #4f83a8;
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-mono-tech);
+}
+
+@theme inline {
+  --color-background: var(--nops-bg);
+  --color-foreground: var(--nops-text);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  border-color: var(--nops-border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--nops-bg);
+  color: var(--nops-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--nops-red-dim);
+  color: white;
+}
+
+.font-mono-tech {
+  font-family: var(--font-mono);
+}
+
+/* Scrollbars — restrained, not default-browser-ugly */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--nops-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--nops-border-strong);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nops-text-faint);
+}
+
+@media print {
+  nav, .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+}
