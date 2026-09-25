@@ -97,6 +97,14 @@ export const feodoFeed = feed(15 * 60 * 1000, async () => {
 
 // ---------------------------------------------------------------- abuse.ch recent exports (threat feed)
 
+// Accepts a string too — some abuse.ch export rows carry tags as a
+// comma-separated string rather than a JSON array — and normalises to string[].
+const looseTags = z
+  .union([z.array(z.string()), z.string()])
+  .nullable()
+  .optional()
+  .transform((v) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(",").map((t) => t.trim()).filter(Boolean) : []));
+
 const threatFoxSchema = z.record(
   z.string(),
   z.array(
@@ -109,7 +117,7 @@ const threatFoxSchema = z.record(
       confidence_level: z.number().nullable().optional(),
       first_seen_utc: z.string().nullable().optional(),
       reference: z.string().nullable().optional(),
-      tags: z.array(z.string()).nullable().optional(),
+      tags: looseTags,
     })
   )
 );
@@ -127,25 +135,27 @@ export const threatFoxRecentFeed = feed(15 * 60 * 1000, async () => {
   return { entries, count: entries.length };
 });
 
-const urlhausSchema = z.array(
-  z.object({
-    id: z.string().nullable().optional(),
-    url: z.string().nullable().optional(),
-    url_status: z.string().nullable().optional(),
-    threat: z.string().nullable().optional(),
-    host: z.string().nullable().optional(),
-    date_added: z.string().nullable().optional(),
-    reporter: z.string().nullable().optional(),
-    tags: z.array(z.string()).nullable().optional(),
-  })
-);
-export type UrlhausEntry = z.infer<typeof urlhausSchema>[number];
+const urlhausEntry = z.object({
+  id: z.string().nullable().optional(),
+  url: z.string().nullable().optional(),
+  url_status: z.string().nullable().optional(),
+  threat: z.string().nullable().optional(),
+  host: z.string().nullable().optional(),
+  date_added: z.string().nullable().optional(),
+  reporter: z.string().nullable().optional(),
+  tags: looseTags,
+});
+// The live export has been observed as both a bare array and an ID-keyed
+// object (the same shape ThreatFox's recent export uses) — accept either.
+const urlhausSchema = z.union([z.array(urlhausEntry), z.record(z.string(), z.union([urlhausEntry, z.array(urlhausEntry)]))]);
+export type UrlhausEntry = z.infer<typeof urlhausEntry>;
 
 export const URLHAUS_RECENT_URL = "https://urlhaus.abuse.ch/downloads/json_recent/";
 
 export const urlhausRecentFeed = feed(15 * 60 * 1000, async () => {
   const { data } = await providerJson(URLHAUS_RECENT_URL, urlhausSchema, { timeoutMs: 20_000, maxBytes: 8 * 1024 * 1024 });
-  const entries = data.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
+  const raw = Array.isArray(data) ? data : Object.values(data).flat();
+  const entries = raw.filter((e): e is UrlhausEntry & { id: string; url: string } => Boolean(e.id && e.url));
   return { entries, count: entries.length };
 });
 
