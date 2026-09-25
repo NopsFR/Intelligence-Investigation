@@ -3,6 +3,7 @@ import tls, { type DetailedPeerCertificate, type TLSSocket } from "node:tls";
 import { X509Certificate } from "node:crypto";
 import type { NormalizedFinding, NormalizedRelationship } from "@/lib/core/types";
 import { resolvePublicAddress } from "@/lib/net/policy";
+import { TargetRequestError } from "@/lib/net/target";
 import { classifyIp } from "@/lib/observables/ip";
 import { event, events, fact, facts } from "../helpers";
 import { ProviderSkip } from "../runtime";
@@ -110,7 +111,7 @@ export async function inspectTls(hostname: string, options: { port?: number; dee
   const socket = await connect(address, hostname, port, options.timeoutMs ?? 7000);
   try {
     const leaf = socket.getPeerCertificate(true);
-    if (!leaf || !leaf.raw) throw new Error("Server presented no certificate");
+    if (!leaf || !leaf.raw) throw new TargetRequestError("The server completed the handshake without presenting a certificate", "tls");
     const chain: ChainCertificate[] = [];
     const seen = new Set<string>();
     let current: DetailedPeerCertificate | undefined = leaf;

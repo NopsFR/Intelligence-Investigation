@@ -13,7 +13,14 @@ import { Prov } from "@/components/ui/badges";
 import { CopyButton } from "@/components/ui/primitives";
 import { buildGraph, NODE_STYLE, PIVOTABLE, RELATION_LABELS, ROOT_NODE_TYPE, type GraphEdge, type GraphNode } from "./model";
 
-type SimNode = SimulationNodeDatum & { id: string; root: boolean };
+type SimNode = SimulationNodeDatum & { id: string; root: boolean; r: number };
+
+/** Approximate half-width of a rendered chip, so collisions respect wide labels. */
+function radiusOf(n: GraphNode): number {
+  const text = n.label && n.type !== "domain" && n.type !== "ip" ? n.label : n.value;
+  const chars = Math.min(text.length, n.root ? 36 : 29);
+  return Math.min(n.root ? 140 : 115, 24 + chars * 3.4) + 10;
+}
 
 interface EntityData extends Record<string, unknown> {
   node: GraphNode;
@@ -53,7 +60,7 @@ const nodeTypes = { entity: EntityNode };
 function layout(nodes: GraphNode[], edges: GraphEdge[], previous: Map<string, { x: number; y: number }>) {
   const sim: SimNode[] = nodes.map((n) => {
     const prev = previous.get(n.key);
-    return { id: n.key, root: n.root, x: prev?.x ?? (n.root ? 0 : (Math.random() - 0.5) * 200), y: prev?.y ?? (n.root ? 0 : (Math.random() - 0.5) * 200), fx: n.root ? 0 : undefined, fy: n.root ? 0 : undefined };
+    return { id: n.key, root: n.root, r: radiusOf(n), x: prev?.x ?? (n.root ? 0 : (Math.random() - 0.5) * 200), y: prev?.y ?? (n.root ? 0 : (Math.random() - 0.5) * 200), fx: n.root ? 0 : undefined, fy: n.root ? 0 : undefined };
   });
   // New nodes start beside an already-placed neighbour so arrivals read as growth, not a reshuffle.
   const byId = new Map(sim.map((s) => [s.id, s]));
@@ -67,9 +74,9 @@ function layout(nodes: GraphNode[], edges: GraphEdge[], previous: Map<string, { 
   }
   const links: SimulationLinkDatum<SimNode>[] = edges.map((e) => ({ source: e.source, target: e.target }));
   const simulation = forceSimulation(sim)
-    .force("link", forceLink<SimNode, SimulationLinkDatum<SimNode>>(links).id((d) => d.id).distance(110).strength(0.6))
-    .force("charge", forceManyBody().strength(-380))
-    .force("collide", forceCollide(62))
+    .force("link", forceLink<SimNode, SimulationLinkDatum<SimNode>>(links).id((d) => d.id).distance((l) => 70 + (l.source as SimNode).r + (l.target as SimNode).r * 0.6).strength(0.5))
+    .force("charge", forceManyBody().strength(-420))
+    .force("collide", forceCollide<SimNode>((d) => d.r).strength(0.9).iterations(2))
     .force("x", forceX(0).strength(0.04))
     .force("y", forceY(0).strength(0.06))
     .stop();
@@ -142,7 +149,7 @@ function GraphCanvas({ inv, height }: { inv: InvestigationRecord; height: number
     });
 
   useEffect(() => {
-    const t = setTimeout(() => fitView({ padding: 0.18, duration: 500 }), 60);
+    const t = setTimeout(() => fitView({ padding: 0.2, duration: 500, maxZoom: 1.05 }), 60);
     return () => clearTimeout(t);
   }, [placed, focus, fitView]);
 
@@ -173,7 +180,6 @@ function GraphCanvas({ inv, height }: { inv: InvestigationRecord; height: number
           onPaneClick={() => setSelected(null)}
           minZoom={0.2}
           maxZoom={2.2}
-          proOptions={{ hideAttribution: true }}
           nodesConnectable={false}
           colorMode="dark"
           aria-label="Evidence graph"
@@ -211,7 +217,7 @@ function GraphCanvas({ inv, height }: { inv: InvestigationRecord; height: number
           <button type="button" className="btn btn-sm btn-icon bg-ink-1/90" onClick={() => zoomOut({ duration: 200 })} aria-label="Zoom out">
             <Minus size={13} />
           </button>
-          <button type="button" className="btn btn-sm btn-icon bg-ink-1/90" onClick={() => fitView({ padding: 0.18, duration: 400 })} aria-label="Fit graph to view">
+          <button type="button" className="btn btn-sm btn-icon bg-ink-1/90" onClick={() => fitView({ padding: 0.2, duration: 400, maxZoom: 1.05 })} aria-label="Fit graph to view">
             <Maximize2 size={12} />
           </button>
           <button type="button" className={cx("btn btn-sm btn-icon bg-ink-1/90", focus && "border-fg-3 text-fg-1")} disabled={!selected} onClick={() => setFocus((f) => !f)} aria-pressed={focus} aria-label="Focus on selected node">

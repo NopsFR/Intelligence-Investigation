@@ -573,3 +573,13 @@
     color: #111 !important;
   }
 }
+
+/* React Flow attribution stays visible (required without a Pro subscription), toned to the palette. */
+.react-flow__attribution {
+  background: transparent !important;
+  opacity: 0.45;
+}
+.react-flow__attribution a {
+  color: var(--color-fg-3) !important;
+  font-size: 9px;
+}

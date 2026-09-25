@@ -8,6 +8,7 @@ import type { IocRecord } from "@/lib/db/ioc";
 import { api, type ApiClientError } from "@/lib/client/api";
 import { cx } from "@/lib/client/cx";
 import { useInvestigate } from "@/lib/client/investigate";
+import { useSession } from "@/lib/client/session";
 import { InvestigationStatusBadge, TypeTag } from "@/components/ui/badges";
 import { Drawer, useToast } from "@/components/ui/overlays";
 import { CopyButton, EmptyState } from "@/components/ui/primitives";
@@ -137,6 +138,8 @@ export function IocLibrary({ initial }: { initial: IocRecord[] }) {
   const [draftTags, setDraftTags] = useState("");
   const toast = useToast();
   const { start } = useInvestigate();
+  const { session } = useSession();
+  const readOnly = !session?.operator;
 
   const reload = async () => {
     const sp = new URLSearchParams();
@@ -228,6 +231,14 @@ export function IocLibrary({ initial }: { initial: IocRecord[] }) {
         </div>
       </div>
 
+      {readOnly && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line-1 bg-ink-2/60 px-[var(--panel-pad)] py-2 text-xs text-fg-3">
+          <span>Read-only. Adding, tagging and removing indicators needs an operator session.</span>
+          <Link href="/settings?section=security" className="link">
+            Unlock
+          </Link>
+        </div>
+      )}
       {items.length ? (
         <div className="overflow-x-auto">
           <table className="table">

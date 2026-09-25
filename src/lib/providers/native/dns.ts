@@ -44,9 +44,20 @@ export const dnsRecords: ProviderDefinition = {
   healthCheck: { observable: "example.com", type: "DOMAIN" },
   async run(ctx) {
     const host = hostFor(ctx.observable, ctx.type);
-    const primary = await Promise.all(PRIMARY_TYPES.map((t) => query("cloudflare", host, t, ctx.signal).catch(() => resolve(host, t, ctx.signal)).catch(() => null)));
+    const errors: unknown[] = [];
+    const primary = await Promise.all(
+      PRIMARY_TYPES.map((t) =>
+        query("cloudflare", host, t, ctx.signal)
+          .catch(() => resolve(host, t, ctx.signal))
+          .catch((err: unknown) => {
+            errors.push(err);
+            return null;
+          })
+      )
+    );
     const failed = primary.filter((p) => p === null).length;
-    if (failed === PRIMARY_TYPES.length) throw new Error("All DNS resolvers failed");
+    // Surface the resolvers' own error (network, timeout, HTTP) so the state is classified correctly.
+    if (failed === PRIMARY_TYPES.length) throw errors[0];
 
     const byType = new Map<RecordType, DnsResponse | null>(PRIMARY_TYPES.map((t, i) => [t, primary[i]]));
     const aResponse = byType.get("A");
