@@ -49,3 +49,10 @@ export const dnsToolSchema = z.object({
   type: z.enum(["A", "AAAA", "CNAME", "MX", "NS", "TXT", "CAA", "SOA", "PTR", "DS", "DNSKEY", "SRV", "HTTPS"]).default("A"),
   resolver: z.enum(["cloudflare", "google", "dnssb"]).default("cloudflare"),
 });
+
+export const osvQuerySchema = z.object({
+  packages: z
+    .array(z.object({ name: z.string().min(1).max(300), version: z.string().min(1).max(200), ecosystem: z.enum(["npm", "PyPI", "Go", "crates.io", "Packagist", "RubyGems", "Maven"]) }))
+    .min(1)
+    .max(1000),
+});
