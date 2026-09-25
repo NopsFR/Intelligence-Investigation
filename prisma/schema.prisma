@@ -1,13 +1,12 @@
-// NOPS / Cyber Intelligence — persistence schema.
-// SQLite for local development; the models avoid SQLite-incompatible
-// features so swapping the datasource to Postgres later is a one-line change.
+// NOPS / Cyber Intelligence — persistence schema. Postgres in every
+// environment (see README for local Postgres setup instead of SQLite).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

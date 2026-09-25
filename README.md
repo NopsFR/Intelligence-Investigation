@@ -30,7 +30,7 @@ provider and a timestamp.
   provider-evidenced relationships for an observable (DNS resolutions, certificate SANs, IOC
   associations). Every edge is clickable and shows its source.
 - **Persistence** — investigations, findings, relationships, and provider results are stored via
-  Prisma/SQLite (swap to Postgres for production — see below).
+  Prisma/Postgres.
 - **API Observatory** — live "Test connection" against every configured provider. No key, token,
   or Authorization header is ever rendered in the UI.
 - **Toolbox** — standalone DNS lookup, RDAP lookup, certificate transparency search, TLS
@@ -102,8 +102,8 @@ variables enable which provider.
 
 ```bash
 npm install
-cp .env.example .env.local     # DATABASE_URL is required; everything else is optional
-npm run db:migrate             # creates the local SQLite database
+cp .env.example .env.local     # set DATABASE_URL to a Postgres connection string
+npm run db:migrate             # applies the schema
 npm run dev
 ```
 
@@ -111,10 +111,10 @@ Open http://localhost:3000.
 
 ### Database
 
-Local development uses SQLite (`prisma/schema.prisma`, `provider = "sqlite"`). For a production
-deployment, point `DATABASE_URL` at a Postgres instance and change the datasource `provider` to
-`"postgresql"`, then re-run `npm run db:migrate`. The schema itself (columns, relations, indexes)
-was designed to be Postgres-compatible from the start.
+Postgres is required in every environment — any provider works (a local Postgres install, Docker,
+Supabase, Neon, RDS, ...). Point `DATABASE_URL` at it and run `npm run db:migrate`. For a
+serverless deployment (Vercel), use a connection-pooled URL (e.g. Supabase's "Transaction pooler"
+on port 6543) so functions don't exhaust the database's direct connection limit.
 
 ### Scripts
 

@@ -6,6 +6,8 @@ import { InvestigationStatusBadge } from "@/components/Badges";
 import { OBSERVABLE_LABELS } from "@/types/observable";
 import { formatDistanceToNow } from "date-fns";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const stats = await dashboardStats();
   const configuredCount = PROVIDERS.filter((p) => p.isConfigured()).length;
