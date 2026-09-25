@@ -33,6 +33,7 @@ export const metadata: Metadata = {
   title: { default: "NOPS / Cyber Intelligence", template: "%s · NOPS" },
   description: "Evidence-based threat intelligence and investigation platform.",
   robots: { index: false, follow: false },
+  other: { "wot-verification": "736dee4fd1188f284bab" },
 };
 
 export const viewport: Viewport = {

@@ -17,6 +17,7 @@ export interface GraphEdge {
   type: string;
   providers: string[];
   evidence: string[];
+  observedAt: string;
 }
 
 export const ROOT_NODE_TYPE: Record<ObservableType, NodeType> = {
@@ -102,7 +103,7 @@ export function buildGraph(relationships: RelationshipRecord[], root: { type: No
     const s = add(r.source.type, r.source.value, r.source.label);
     const t = add(r.target.type, r.target.value, r.target.label);
     if (s === t) continue;
-    edges.push({ id: r.id, source: s, target: t, type: r.type, providers: r.providers, evidence: r.evidence });
+    edges.push({ id: r.id, source: s, target: t, type: r.type, providers: r.providers, evidence: r.evidence, observedAt: r.observedAt });
     nodes.get(s)!.degree++;
     nodes.get(t)!.degree++;
   }

@@ -11,6 +11,7 @@ import { cx } from "@/lib/client/cx";
 import { useInvestigate } from "@/lib/client/investigate";
 import { Prov } from "@/components/ui/badges";
 import { CopyButton } from "@/components/ui/primitives";
+import { Time } from "@/components/ui/Time";
 import { buildGraph, NODE_STYLE, PIVOTABLE, RELATION_LABELS, ROOT_NODE_TYPE, type GraphEdge, type GraphNode } from "./model";
 
 type SimNode = SimulationNodeDatum & { id: string; root: boolean; r: number };
@@ -276,11 +277,14 @@ function GraphCanvas({ inv, height }: { inv: InvestigationRecord; height: number
                         </li>
                       ))}
                     </ul>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {e.providers.map((p) => (
                         <Prov key={p} id={p} />
                       ))}
                       <span className="sr-only">Reported by {e.providers.map(name).join(", ")}</span>
+                      <span className="mono text-[10.5px] text-fg-4">
+                        observed <Time iso={e.observedAt} />
+                      </span>
                     </div>
                   </li>
                 );
