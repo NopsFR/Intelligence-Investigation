@@ -1,43 +1,27 @@
-import { NextResponse } from "next/server";
-import { iocUpdateSchema } from "@/lib/validation/schemas";
-import { prisma } from "@/lib/db/client";
+import type { NextRequest } from "next/server";
+import { deleteIocs, updateIoc } from "@/lib/db/ioc";
+import { ApiError, assertSameOrigin, handler, json, readJson, requireOperator } from "@/lib/server/api";
+import { idSchema, iocPatchSchema } from "@/lib/server/schemas";
 
-export const runtime = "nodejs";
+type Ctx = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  let body: unknown;
+export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
+  assertSameOrigin(req);
+  await requireOperator("Editing the IOC library");
+  const id = idSchema.parse((await params).id);
+  const patch = await readJson(req, iocPatchSchema);
   try {
-    body = await request.json();
+    const row = await updateIoc(id, patch);
+    return json({ id: row.id });
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    throw new ApiError(404, "not-found", "Indicator not found.");
   }
+});
 
-  const parsed = iocUpdateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 });
-  }
-
-  try {
-    const item = await prisma.iocEntry.update({
-      where: { id },
-      data: {
-        notes: parsed.data.notes,
-        tags: parsed.data.tags ? JSON.stringify(parsed.data.tags) : undefined,
-      },
-    });
-    return NextResponse.json({ item });
-  } catch {
-    return NextResponse.json({ error: "IOC not found" }, { status: 404 });
-  }
-}
-
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  try {
-    await prisma.iocEntry.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "IOC not found" }, { status: 404 });
-  }
-}
+export const DELETE = handler(async (req: NextRequest, { params }: Ctx) => {
+  assertSameOrigin(req, { requireJson: false });
+  await requireOperator("Editing the IOC library");
+  const id = idSchema.parse((await params).id);
+  if (!(await deleteIocs([id]))) throw new ApiError(404, "not-found", "Indicator not found.");
+  return json({ deleted: id });
+});

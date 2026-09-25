@@ -1,9 +1,4 @@
-import { NextResponse } from "next/server";
-import { dashboardStats } from "@/lib/db/investigations";
+import { dashboardData } from "@/lib/db/dashboard";
+import { handler, json } from "@/lib/server/api";
 
-export const runtime = "nodejs";
-
-export async function GET() {
-  const stats = await dashboardStats();
-  return NextResponse.json(stats);
-}
+export const GET = handler(async () => json(await dashboardData()));

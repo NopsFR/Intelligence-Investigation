@@ -1,43 +1,20 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { testProvider } from "@/lib/db/health";
 import { getProvider } from "@/lib/providers/registry";
-import { prisma } from "@/lib/db/client";
-import { rateLimit, clientKeyFrom } from "@/lib/security/rateLimit";
+import { ApiError, assertSameOrigin, enforceLimits, handler, json } from "@/lib/server/api";
 
-export const runtime = "nodejs";
+type Ctx = { params: Promise<{ provider: string }> };
 
-export async function POST(request: Request, { params }: { params: Promise<{ provider: string }> }) {
-  const key = clientKeyFrom(request);
-  const limited = rateLimit(`observatory-test:${key}`, 30, 60_000);
-  if (!limited.allowed) {
-    return NextResponse.json({ error: "Rate limit exceeded. Try again shortly." }, { status: 429 });
-  }
+export const maxDuration = 60;
 
-  const { provider: providerId } = await params;
-  const provider = getProvider(providerId);
-  if (!provider) {
-    return NextResponse.json({ error: "Unknown provider" }, { status: 404 });
-  }
-
-  const outcome = await provider.healthCheck();
-
-  await prisma.apiProviderHealth.upsert({
-    where: { provider: providerId },
-    create: {
-      provider: providerId,
-      configured: provider.isConfigured(),
-      lastCheckedAt: new Date(),
-      lastStatus: outcome.status,
-      lastLatencyMs: outcome.latencyMs,
-      lastError: outcome.errorMessage ?? null,
-    },
-    update: {
-      configured: provider.isConfigured(),
-      lastCheckedAt: new Date(),
-      lastStatus: outcome.status,
-      lastLatencyMs: outcome.latencyMs,
-      lastError: outcome.errorMessage ?? null,
-    },
-  });
-
-  return NextResponse.json({ outcome });
-}
+export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
+  assertSameOrigin(req, { requireJson: false });
+  const def = getProvider((await params).provider);
+  if (!def) throw new ApiError(404, "not-found", "Unknown provider.");
+  if (!def.healthCheck) throw new ApiError(400, "not-testable", `${def.name} is derived from other sources and has no connection of its own to test.`);
+  await enforceLimits(req, [
+    { name: "provider-test", limit: 20, windowSeconds: 300, scope: "client" },
+    { name: `provider-test:${def.id}`, limit: 30, windowSeconds: 3600, scope: "global" },
+  ]);
+  return json(await testProvider(def));
+});

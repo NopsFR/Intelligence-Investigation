@@ -1,38 +1,63 @@
-import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
-import { Nav } from "@/components/Nav";
+import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
+import { headers } from "next/headers";
+import { AppShell } from "@/components/shell/AppShell";
+import { ToastProvider } from "@/components/ui/overlays";
+import { CatalogProvider } from "@/lib/client/catalog";
+import { PREFS_BOOT_SCRIPT, PrefsProvider } from "@/lib/client/prefs";
+import { SessionProvider } from "@/lib/client/session";
+import { providerCatalog } from "@/lib/providers/catalog";
+import { isOperator } from "@/lib/server/api";
+import { operatorConfigured } from "@/lib/server/session";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
+const archivo = localFont({
+  src: "../../node_modules/@fontsource-variable/archivo/files/archivo-latin-standard-normal.woff2",
+  variable: "--font-archivo",
+  weight: "100 900",
   display: "swap",
+  declarations: [{ prop: "font-stretch", value: "62% 125%" }],
 });
 
-const mono = JetBrains_Mono({
-  variable: "--font-mono-tech",
-  subsets: ["latin"],
+const plexMono = localFont({
+  src: [
+    { path: "../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2", weight: "400" },
+    { path: "../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2", weight: "500" },
+    { path: "../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2", weight: "600" },
+  ],
+  variable: "--font-plex-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "NOPS / Cyber Intelligence",
-  description:
-    "An evidence-based cybersecurity intelligence and investigation workspace for IPs, domains, URLs, hashes, and CVEs.",
+  title: { default: "NOPS / Cyber Intelligence", template: "%s · NOPS" },
+  description: "Evidence-based threat intelligence and investigation platform.",
+  robots: { index: false, follow: false },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export const viewport: Viewport = {
+  themeColor: "#08090a",
+  colorScheme: "dark",
+};
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const operator = await isOperator();
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-[var(--nops-bg)] text-[var(--nops-text)]">
-        <Nav />
-        <main className="flex-1">{children}</main>
-        <footer className="border-t border-[var(--nops-border)] py-6">
-          <div className="mx-auto max-w-[1400px] px-4 md:px-6 font-mono text-[11px] text-[var(--nops-text-faint)] flex flex-wrap gap-x-4 gap-y-1 justify-between">
-            <span>NOPS / CYBER INTELLIGENCE</span>
-            <span>Investigations reflect provider data at time of query. Absence of an indicator does not prove absence of activity.</span>
-          </div>
-        </footer>
+    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: PREFS_BOOT_SCRIPT }} />
+      </head>
+      <body>
+        <PrefsProvider>
+          <SessionProvider initial={{ operator, configured: operatorConfigured(), privateMode: process.env.NOPS_PRIVATE === "1" }}>
+            <CatalogProvider providers={providerCatalog()}>
+              <ToastProvider>
+                <AppShell>{children}</AppShell>
+              </ToastProvider>
+            </CatalogProvider>
+          </SessionProvider>
+        </PrefsProvider>
       </body>
     </html>
   );

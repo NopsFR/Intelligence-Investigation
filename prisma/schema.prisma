@@ -1,13 +1,13 @@
-// NOPS / Cyber Intelligence — persistence schema. Postgres in every
-// environment (see README for local Postgres setup instead of SQLite).
+// NOPS / Cyber Intelligence — persistence schema (PostgreSQL).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum ObservableType {
@@ -20,6 +20,8 @@ enum ObservableType {
   SHA256
   CVE
   ASN
+  EMAIL
+  CERT_SHA256
 }
 
 enum InvestigationStatus {
@@ -41,6 +43,7 @@ enum ProviderStatus {
   NETWORK_ERROR
   INVALID_RESPONSE
   UNAVAILABLE
+  SKIPPED
 }
 
 enum InvestigationMode {
@@ -49,24 +52,30 @@ enum InvestigationMode {
 }
 
 model Investigation {
-  id                  String              @id @default(cuid())
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  observable          String
+  id                   String              @id @default(cuid())
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  completedAt          DateTime?
+  durationMs           Int?
+  observable           String
   observableType       ObservableType
   normalizedObservable String
-  mode                InvestigationMode   @default(QUICK)
-  status              InvestigationStatus @default(PENDING)
-  summary             String?
-  metadata            String? // JSON blob: provider counts, timings, etc.
+  mode                 InvestigationMode   @default(QUICK)
+  status               InvestigationStatus @default(PENDING)
+  summary              String?
+  /// Ordered execution plan: [{ id, dependsOn }] — lets the UI show queued/running tasks.
+  plan                 Json?
+  metadata             Json?
+  previousId           String?
 
   providerResults ProviderResult[]
   findings        Finding[]
   relationships   Relationship[]
 
-  @@index([normalizedObservable])
+  @@index([normalizedObservable, createdAt])
   @@index([observableType])
   @@index([createdAt])
+  @@index([status])
 }
 
 model ProviderResult {
@@ -76,32 +85,58 @@ model ProviderResult {
   provider        String
   status          ProviderStatus
   latencyMs       Int?
+  startedAt       DateTime?
   retrievedAt     DateTime       @default(now())
+  cached          Boolean        @default(false)
+  httpStatus      Int?
   errorType       String?
   errorMessage    String?
-  normalized      String? // JSON blob: NormalizedResult
-  raw             String? // JSON blob: sanitized raw provider payload (no secrets)
+  result          Json?
+  raw             Json?
+  diagnostics     Json?
 
-  @@index([investigationId])
-  @@index([provider])
+  @@unique([investigationId, provider])
+  @@index([provider, retrievedAt])
 }
 
 model Finding {
   id              String        @id @default(cuid())
   investigationId String
   investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
-  severity        String // CRITICAL | HIGH | MEDIUM | LOW | INFO
+  rule            String
+  severity        String
   category        String
   title           String
   description     String
+  rationale       String?
   evidence        String
+  evidenceData    Json?
   source          String
+  observable      String?
+  confidence      String?
+  remediation     String?
+  references      Json?
   observedAt      DateTime      @default(now())
-  confidence      String? // only set when a provider supplies it
-  methodology     String?
 
   @@index([investigationId])
-  @@index([severity])
+  @@index([severity, observedAt])
+}
+
+model Relationship {
+  id              String        @id @default(cuid())
+  investigationId String
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  sourceType      String
+  sourceValue     String
+  targetType      String
+  targetValue     String
+  targetLabel     String?
+  relationType    String
+  provider        String
+  evidence        String
+  observedAt      DateTime      @default(now())
+
+  @@index([investigationId])
 }
 
 model Observable {
@@ -110,45 +145,75 @@ model Observable {
   type      ObservableType
   firstSeen DateTime       @default(now())
   lastSeen  DateTime       @updatedAt
-  tags      String? // JSON string array
+  tags      Json?
 
   @@unique([value, type])
-}
-
-model Relationship {
-  id              String        @id @default(cuid())
-  investigationId String
-  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
-  sourceNode      String
-  targetNode      String
-  relationType    String
-  sourceProvider  String
-  evidence        String
-  observedAt      DateTime      @default(now())
-
-  @@index([investigationId])
 }
 
 model IocEntry {
-  id                    String   @id @default(cuid())
-  value                 String
-  type                  ObservableType
-  tags                  String? // JSON string array
-  notes                 String?
-  source                String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  investigationRefIds   String? // JSON string array of Investigation ids
+  id                  String         @id @default(cuid())
+  value               String
+  type                ObservableType
+  tags                Json?
+  notes               String?
+  source              String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  investigationRefIds Json?
 
   @@unique([value, type])
+  @@index([updatedAt])
 }
 
 model ApiProviderHealth {
-  id            String   @id @default(cuid())
-  provider      String   @unique
-  configured    Boolean  @default(false)
+  id            String    @id @default(cuid())
+  provider      String    @unique
+  configured    Boolean   @default(false)
   lastCheckedAt DateTime?
   lastStatus    String?
   lastLatencyMs Int?
   lastError     String?
+  lastErrorType String?
+}
+
+/// Every connection test is kept (bounded) so the Observatory can show latency history.
+model ProviderCheck {
+  id        String   @id @default(cuid())
+  provider  String
+  checkedAt DateTime @default(now())
+  status    String
+  latencyMs Int?
+  errorType String?
+  message   String?
+
+  @@index([provider, checkedAt])
+}
+
+/// Cached provider responses, honouring per-provider TTLs.
+model ProviderCache {
+  id          String   @id @default(cuid())
+  provider    String
+  cacheKey    String
+  status      String
+  result      Json?
+  raw         Json?
+  diagnostics Json?
+  httpStatus  Int?
+  latencyMs   Int?
+  retrievedAt DateTime
+  expiresAt   DateTime
+
+  @@unique([provider, cacheKey])
+  @@index([expiresAt])
+}
+
+/// Fixed-window counters shared by every serverless instance (endpoint and provider quotas).
+model RateLimitBucket {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+  expiresAt   DateTime
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
 }

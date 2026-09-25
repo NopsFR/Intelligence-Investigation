@@ -1,68 +1,36 @@
-import { NextResponse } from "next/server";
-import { iocCreateSchema } from "@/lib/validation/schemas";
-import { detectObservable } from "@/lib/observables/detect";
-import { prisma } from "@/lib/db/client";
+import type { NextRequest } from "next/server";
+import { detectAs } from "@/lib/observables/detect";
+import { addIocs, deleteIocs, listIocs } from "@/lib/db/ioc";
+import { ApiError, assertSameOrigin, handler, json, readJson, requireOperator } from "@/lib/server/api";
+import { iocCreateSchema, iocDeleteSchema, observableTypeSchema } from "@/lib/server/schemas";
 
-export const runtime = "nodejs";
+export const GET = handler(async (req: NextRequest) => {
+  const sp = req.nextUrl.searchParams;
+  const type = sp.get("type") ? observableTypeSchema.parse(sp.get("type")) : undefined;
+  return json({ items: await listIocs({ q: sp.get("q")?.slice(0, 200) || undefined, type, tag: sp.get("tag")?.slice(0, 40) || undefined }) });
+});
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const search = url.searchParams.get("search")?.trim();
-  const tag = url.searchParams.get("tag")?.trim();
-
-  const entries = await prisma.iocEntry.findMany({
-    where: search ? { value: { contains: search } } : undefined,
-    orderBy: { updatedAt: "desc" },
-    take: 200,
+export const POST = handler(async (req: NextRequest) => {
+  assertSameOrigin(req);
+  await requireOperator("Editing the IOC library");
+  const body = await readJson(req, iocCreateSchema, 512 * 1024);
+  const rejected: string[] = [];
+  const entries = body.entries.flatMap((e) => {
+    const d = detectAs(e.value, e.type);
+    if (!d) {
+      rejected.push(e.value.slice(0, 100));
+      return [];
+    }
+    return [{ value: d.normalized, type: d.type, tags: e.tags, notes: e.notes, source: body.source, investigationId: e.investigationId }];
   });
+  if (!entries.length) throw new ApiError(422, "no-valid-indicators", "None of the submitted values is a recognised observable.");
+  const result = await addIocs(entries);
+  return json({ ...result, rejected }, { status: 201 });
+});
 
-  const filtered = tag
-    ? entries.filter((e) => (e.tags ? (JSON.parse(e.tags) as string[]).includes(tag) : false))
-    : entries;
-
-  return NextResponse.json({
-    items: filtered.map((e) => ({
-      ...e,
-      tags: e.tags ? JSON.parse(e.tags) : [],
-      investigationRefIds: e.investigationRefIds ? JSON.parse(e.investigationRefIds) : [],
-      createdAt: e.createdAt.toISOString(),
-      updatedAt: e.updatedAt.toISOString(),
-    })),
-  });
-}
-
-export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const parsed = iocCreateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const detected = detectObservable(parsed.data.value);
-  if (!detected) {
-    return NextResponse.json({ error: "Could not detect a supported observable type for this value." }, { status: 422 });
-  }
-
-  const entry = await prisma.iocEntry.upsert({
-    where: { value_type: { value: detected.normalized, type: detected.type } },
-    create: {
-      value: detected.normalized,
-      type: detected.type,
-      notes: parsed.data.notes,
-      tags: parsed.data.tags ? JSON.stringify(parsed.data.tags) : null,
-      source: parsed.data.source ?? "Manual entry",
-    },
-    update: {
-      notes: parsed.data.notes,
-      tags: parsed.data.tags ? JSON.stringify(parsed.data.tags) : undefined,
-    },
-  });
-
-  return NextResponse.json({ item: entry }, { status: 201 });
-}
+export const DELETE = handler(async (req: NextRequest) => {
+  assertSameOrigin(req);
+  await requireOperator("Editing the IOC library");
+  const { ids } = await readJson(req, iocDeleteSchema);
+  return json({ deleted: await deleteIocs(ids) });
+});

@@ -1,36 +1,30 @@
 import type { NextConfig } from "next";
 
-const csp = [
-  "default-src 'self'",
-  // Next.js requires 'unsafe-inline' for its hydration bootstrap script and
-  // 'unsafe-eval' in development only (Turbopack HMR). No third-party
-  // script origins are allowed.
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
+// Page CSP is per-request (nonce) and set in src/proxy.ts. These headers apply to every response.
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  agentRules: false,
+  devIndicators: false,
+  // The ATT&CK dataset is read from disk at runtime rather than bundled into every function.
+  outputFileTracingIncludes: {
+    "/api/**": ["./src/data/attack/enterprise.json"],
+    "/attack/**": ["./src/data/attack/enterprise.json"],
+    "/investigations/**": ["./src/data/attack/enterprise.json"],
+  },
   async headers() {
     return [
-      {
-        source: "/:path*",
-        headers: securityHeaders,
-      },
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
     ];
   },
 };
