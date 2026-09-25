@@ -1,10 +1,11 @@
 "use client";
 
-import { Eye, EyeOff, KeyRound, Search, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Database, Eye, EyeOff, FileSearch, KeyRound, Mail, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { api, ApiClientError } from "@/lib/client/api";
 import { registrableDomain } from "@/lib/observables/detect";
-import { ErrorNote } from "@/components/ui/primitives";
+import { useInvestigate } from "@/lib/client/investigate";
+import { ErrorNote, Panel } from "@/components/ui/primitives";
 import { Chip, Mono } from "../analysis/common";
 import { Time } from "../ui/Time";
 
@@ -37,8 +38,246 @@ async function sha1Hex(text: string): Promise<string> {
 export function Exposure() {
   return (
     <div className="flex flex-col gap-4">
+      <EmailExposure />
       <DomainExposure />
       <PasswordExposure />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Email investigation
+
+interface EmailExposureResult {
+  email: string;
+  domain: string;
+  exposureOverview: {
+    status: "confirmed-exposure" | "no-result" | "not-configured" | "rate-limited" | "provider-unavailable";
+    breachCount: number;
+    earliestBreach?: string;
+    latestBreach?: string;
+    dataClasses: string[];
+    stealerLogCount: number;
+    passwordExposed: boolean;
+  };
+  breaches: {
+    name: string;
+    title: string;
+    domain?: string;
+    breachDate?: string;
+    addedDate?: string;
+    pwnCount?: number;
+    dataClasses: string[];
+    verified?: boolean;
+    sensitive?: boolean;
+    retired?: boolean;
+    stealerLog?: boolean;
+    description?: string;
+  }[];
+  credentialExposure: { status: string; passwordExposed: boolean; stealerLogCount: number; pasteExposure: { status: string; note: string } };
+  emailIntelligence: { domain: string; disposable: boolean; disposableListSize: number; provider: string };
+  domainExposure: { status: string; breachCount: number; note: string };
+  timeline: { date?: string; label: string; kind: string; stealerLog: boolean }[];
+  evidence: { source: string; status: string; retrievedAt: string; configured?: boolean }[];
+  methodology: string;
+}
+
+const STATUS_CHIP: Record<string, { tone: "err" | "ok" | "warn" | "neutral"; label: string }> = {
+  "confirmed-exposure": { tone: "err", label: "Confirmed exposure" },
+  "no-result": { tone: "ok", label: "No result" },
+  "not-configured": { tone: "neutral", label: "Not configured" },
+  "rate-limited": { tone: "warn", label: "Rate limited" },
+  "provider-unavailable": { tone: "warn", label: "Provider unavailable" },
+  unsupported: { tone: "neutral", label: "Unsupported" },
+};
+
+function StatusChip({ status }: { status: string }) {
+  const s = STATUS_CHIP[status] ?? { tone: "neutral" as const, label: status };
+  return <Chip tone={s.tone}>{s.label}</Chip>;
+}
+
+function EmailExposure() {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<{ phase: "idle" } | { phase: "loading" } | { phase: "done"; result: EmailExposureResult } | { phase: "error"; message: string }>({ phase: "idle" });
+  const { start, pending } = useInvestigate();
+
+  const run = async (raw: string) => {
+    const value = raw.trim();
+    if (!value) return;
+    setState({ phase: "loading" });
+    try {
+      const result = await api<EmailExposureResult>(`/api/intel/exposure/email?email=${encodeURIComponent(value)}`);
+      setState({ phase: "done", result });
+    } catch (err) {
+      setState({ phase: "error", message: (err as ApiClientError).message });
+    }
+  };
+
+  return (
+    <section className="panel panel-ticks">
+      <header className="flex items-center gap-2 border-b border-line-1 px-[var(--panel-pad)] py-2.5">
+        <Mail size={14} className="text-fg-3" />
+        <h2 className="label text-fg-2">Email exposure investigation</h2>
+      </header>
+      <div className="p-[var(--panel-pad)]">
+        <p className="mb-3 max-w-2xl text-sm text-fg-3">
+          Treats an email address as an observable — breach history, exposed data categories, and domain mail-security context — sourced from authenticated provider APIs. This is exposure intelligence, not a people-search: no address, phone number, or personal record is looked up.
+        </p>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(email);
+          }}
+        >
+          <input className="input h-9 max-w-sm flex-1" placeholder="someone@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email address to investigate" />
+          <button type="submit" className="btn btn-primary" disabled={state.phase === "loading"}>
+            <Search size={14} /> Investigate
+          </button>
+        </form>
+
+        {state.phase === "error" && (
+          <div className="mt-3">
+            <ErrorNote title="Could not complete the investigation">{state.message}</ErrorNote>
+          </div>
+        )}
+
+        {state.phase === "done" && (
+          <div className="mt-4 flex flex-col gap-4">
+            {/* Exposure Overview */}
+            <Panel title="Exposure overview" meta={<StatusChip status={state.result.exposureOverview.status} />} bodyClassName="p-0">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 p-[var(--panel-pad)] sm:grid-cols-4">
+                <Stat label="Known breaches" value={state.result.exposureOverview.breachCount} />
+                <Stat label="Earliest exposure" value={state.result.exposureOverview.earliestBreach ?? "—"} />
+                <Stat label="Latest exposure" value={state.result.exposureOverview.latestBreach ?? "—"} />
+                <Stat label="Stealer-log hits" value={state.result.exposureOverview.stealerLogCount} />
+              </div>
+              {state.result.exposureOverview.dataClasses.length > 0 && (
+                <div className="flex flex-wrap gap-1 border-t border-line-1 px-[var(--panel-pad)] py-2.5">
+                  {state.result.exposureOverview.dataClasses.map((c) => (
+                    <Chip key={c} tone={c.toLowerCase().includes("password") ? "err" : "neutral"}>
+                      {c}
+                    </Chip>
+                  ))}
+                </div>
+              )}
+              {state.result.exposureOverview.status === "not-configured" && <p className="border-t border-line-1 px-[var(--panel-pad)] py-2.5 text-xs text-fg-3">HIBP_API_KEY is not configured — per-account breach lookups are unavailable. The domain-wide catalogue check below still runs (keyless).</p>}
+            </Panel>
+
+            {/* Breaches */}
+            {state.result.breaches.length > 0 && (
+              <Panel title="Breaches" meta={`${state.result.breaches.length}`} bodyClassName="p-0">
+                <ul className="flex flex-col divide-y divide-line-1">
+                  {state.result.breaches.map((b) => (
+                    <li key={b.name} className="px-[var(--panel-pad)] py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-fg-1">{b.title}</span>
+                        {b.verified === false && <Chip tone="warn">unverified</Chip>}
+                        {b.sensitive && <Chip tone="warn">sensitive</Chip>}
+                        {b.retired && <Chip>retired</Chip>}
+                        {b.stealerLog && <Chip tone="err">stealer log</Chip>}
+                        {b.breachDate && <Mono className="text-xs text-fg-4">{b.breachDate}</Mono>}
+                        {b.pwnCount !== undefined && <span className="text-xs text-fg-4">{b.pwnCount.toLocaleString()} accounts</span>}
+                      </div>
+                      {b.description && <p className="mt-1 max-w-2xl text-xs text-fg-3" dangerouslySetInnerHTML={{ __html: b.description.replace(/<a /g, '<a rel="noopener noreferrer nofollow" target="_blank" ') }} />}
+                      {b.dataClasses.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {b.dataClasses.map((c) => (
+                            <Chip key={c} tone={c.toLowerCase().includes("password") ? "err" : "neutral"}>
+                              {c}
+                            </Chip>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
+            )}
+
+            {/* Credential exposure */}
+            <Panel title="Credential exposure" bodyClassName="p-0">
+              <div className="flex flex-col gap-2 p-[var(--panel-pad)] text-sm">
+                <div className="flex items-center gap-2">
+                  {state.result.credentialExposure.passwordExposed ? <ShieldAlert size={14} className="text-err" /> : <ShieldCheck size={14} className="text-ok" />}
+                  <span className="text-fg-2">{state.result.credentialExposure.passwordExposed ? "A password data class appears in at least one breach" : "No password data class found in known breaches"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className={state.result.credentialExposure.stealerLogCount > 0 ? "text-err" : "text-fg-4"} />
+                  <span className="text-fg-2">{state.result.credentialExposure.stealerLogCount > 0 ? `${state.result.credentialExposure.stealerLogCount} stealer-log-sourced breach record(s)` : "No stealer-log indicators"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusChip status={state.result.credentialExposure.pasteExposure.status} />
+                  <span className="text-xs text-fg-4">{state.result.credentialExposure.pasteExposure.note}</span>
+                </div>
+                <p className="mt-1 text-xs text-fg-4">Actual passwords, hashes, or other secrets are never fetched, stored, or displayed — only whether a breach&apos;s disclosed data-class list includes password-related fields.</p>
+              </div>
+            </Panel>
+
+            {/* Email intelligence */}
+            <Panel title="Email intelligence" bodyClassName="p-0">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 p-[var(--panel-pad)] sm:grid-cols-3">
+                <Stat label="Domain" value={state.result.emailIntelligence.domain} mono />
+                <Stat label="Disposable provider" value={state.result.emailIntelligence.disposable ? "Yes" : "Not in curated list"} />
+                <Stat label="Breach data provider" value={state.result.emailIntelligence.provider} />
+              </div>
+              <p className="border-t border-line-1 px-[var(--panel-pad)] py-2.5 text-xs text-fg-4">Disposable-domain detection uses a curated static list of {state.result.emailIntelligence.disposableListSize} known providers — a &quot;no&quot; result means not in this list, not confirmed non-disposable.</p>
+            </Panel>
+
+            {/* Domain-wide exposure + full investigation handoff */}
+            <Panel title="Domain exposure & threat intelligence" meta={<StatusChip status={state.result.domainExposure.status} />} bodyClassName="p-0">
+              <div className="flex flex-col gap-2 p-[var(--panel-pad)] text-sm text-fg-2">
+                <p className="text-xs text-fg-4">{state.result.domainExposure.note}</p>
+                <p>{state.result.domainExposure.breachCount} domain-wide breach{state.result.domainExposure.breachCount === 1 ? "" : "es"} attributed to {state.result.domain}.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 border-t border-line-1 px-[var(--panel-pad)] py-2.5">
+                <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => void start(state.result.domain, "QUICK", { type: "DOMAIN" })}>
+                  <FileSearch size={13} /> RDAP, DNS, SPF/DKIM/DMARC, certificates, threat intel for {state.result.domain} <ArrowRight size={12} />
+                </button>
+              </div>
+            </Panel>
+
+            {/* Timeline */}
+            {state.result.timeline.length > 0 && (
+              <Panel title="Timeline" meta={<Clock size={13} className="text-fg-4" />} bodyClassName="p-0">
+                <ol className="flex flex-col divide-y divide-line-1">
+                  {state.result.timeline.map((e, i) => (
+                    <li key={i} className="flex items-center gap-3 px-[var(--panel-pad)] py-2 text-sm">
+                      <Mono className="w-24 shrink-0 text-xs text-fg-4">{e.date}</Mono>
+                      <span className="text-fg-2">{e.label}</span>
+                      {e.stealerLog && <Chip tone="err">stealer log</Chip>}
+                    </li>
+                  ))}
+                </ol>
+              </Panel>
+            )}
+
+            {/* Evidence */}
+            <Panel title="Evidence" meta={<Database size={13} className="text-fg-4" />} bodyClassName="p-0">
+              <ul className="flex flex-col divide-y divide-line-1">
+                {state.result.evidence.map((e, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-2 px-[var(--panel-pad)] py-2 text-xs">
+                    <span className="text-fg-2">{e.source}</span>
+                    <StatusChip status={e.status} />
+                    <span className="text-fg-4">
+                      retrieved <Time iso={e.retrievedAt} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="border-t border-line-1 px-[var(--panel-pad)] py-2.5 text-xs text-fg-4">{state.result.methodology}</p>
+            </Panel>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Stat({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) {
+  return (
+    <div>
+      <div className="text-xs text-fg-4">{label}</div>
+      <div className={mono ? "mono text-sm text-fg-1" : "text-sm text-fg-1"}>{value}</div>
     </div>
   );
 }
