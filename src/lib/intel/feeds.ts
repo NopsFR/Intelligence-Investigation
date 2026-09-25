@@ -311,3 +311,27 @@ export const hibpBreachCatalogueFeed = feed(6 * 60 * 60 * 1000, async () => {
   }
   return { entries: data, byDomain };
 });
+
+// ---------------------------------------------------------------- IEEE OUI (MAC vendor) registry
+
+export const OUI_CSV_URL = "https://standards-oui.ieee.org/oui/oui.csv";
+
+export const ouiFeed = feed(24 * 60 * 60 * 1000, async () => {
+  const response = await providerRequest(OUI_CSV_URL, { timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024 });
+  const byPrefix = new Map<string, string>();
+  for (const line of response.text.split("\n")) {
+    // Registry,Assignment,Organization Name,Organization Address
+    const m = /^MA-L,([0-9A-F]{6}),"?([^",]+)"?/i.exec(line);
+    if (m) byPrefix.set(m[1].toUpperCase(), m[2].trim());
+  }
+  return { byPrefix, count: byPrefix.size };
+});
+
+export async function lookupOui(mac: string): Promise<{ prefix: string; vendor: string } | null> {
+  const hex = mac.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+  if (hex.length < 6) return null;
+  const prefix = hex.slice(0, 6);
+  const { value } = await ouiFeed.get();
+  const vendor = value.byPrefix.get(prefix);
+  return vendor ? { prefix, vendor } : null;
+}
